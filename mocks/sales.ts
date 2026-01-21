@@ -1,0 +1,58 @@
+import { Sale } from '@/types';
+
+export const mockSales: Sale[] = [
+  {
+    id: '1',
+    leadId: '1',
+    influencerId: '1',
+    amount: 50000,
+    gst: true,
+    saleDate: '2024-01-20T00:00:00Z',
+    createdAt: '2024-01-20T10:30:00Z',
+  },
+  {
+    id: '2',
+    leadId: '2',
+    influencerId: '2',
+    amount: 75000,
+    gst: false,
+    saleDate: '2024-02-12T00:00:00Z',
+    createdAt: '2024-02-12T14:20:00Z',
+  },
+  {
+    id: '3',
+    leadId: '6',
+    influencerId: '1',
+    amount: 60000,
+    gst: true,
+    saleDate: '2024-01-25T00:00:00Z',
+    createdAt: '2024-01-25T11:15:00Z',
+  },
+  {
+    id: '4',
+    leadId: '7',
+    influencerId: '2',
+    amount: 85000,
+    gst: true,
+    saleDate: '2024-02-18T00:00:00Z',
+    createdAt: '2024-02-18T16:45:00Z',
+  },
+  {
+    id: '5',
+    leadId: '9',
+    influencerId: '1',
+    amount: 45000,
+    gst: false,
+    saleDate: '2024-01-16T00:00:00Z',
+    createdAt: '2024-01-16T09:30:00Z',
+  },
+  {
+    id: '6',
+    leadId: '10',
+    influencerId: '2',
+    amount: 70000,
+    gst: true,
+    saleDate: '2024-02-23T00:00:00Z',
+    createdAt: '2024-02-23T13:20:00Z',
+  },
+];
