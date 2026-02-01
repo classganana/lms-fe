@@ -89,7 +89,7 @@ export default function LeadsPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-8">
+      <div className="space-y-8 h-full overflow-y-auto">
         <div>
           <h1 className="text-4xl font-bold tracking-tight mb-2">Leads</h1>
           <p className="text-muted-foreground">Manage and track your leads</p>

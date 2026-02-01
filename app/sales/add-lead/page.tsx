@@ -385,7 +385,7 @@ export default function AddLeadPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground">Source Code</label>
+                  <label className="text-sm font-medium">Source Code</label>
                   <Input 
                     value={activeInfluencers.find(i => i.id === watch('influencerId'))?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || ''}
                     readOnly
@@ -479,12 +479,23 @@ export default function AddLeadPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Converted</label>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      checked={converted}
-                      onCheckedChange={(checked) => setValue('converted', checked)}
-                    />
-                    <span className="text-sm text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setValue('converted', !converted)}
+                      className={cn(
+                        "relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2",
+                        converted ? "bg-gray-400" : "bg-gray-300"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform",
+                          converted ? "translate-x-8" : "translate-x-1"
+                        )}
+                      />
+                    </button>
+                    <span className="text-sm font-medium text-foreground">
                       {converted ? 'Yes' : 'No'}
                     </span>
                   </div>
@@ -493,25 +504,37 @@ export default function AddLeadPage() {
                 {converted && (
                   <>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Sale Amount *</label>
+                      <label className="text-sm font-semibold text-foreground">Sale Amount <span className="text-destructive">*</span></label>
                       <Input
                         type="number"
                         {...register('salesAmount', { valueAsNumber: true })}
                         placeholder="50000"
+                        className="h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary"
                       />
                       {errors.salesAmount && (
-                        <p className="text-sm text-destructive">{errors.salesAmount.message}</p>
+                        <p className="text-sm text-destructive font-medium">{errors.salesAmount.message}</p>
                       )}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">GST Customer</label>
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={gstCustomer}
-                          onCheckedChange={(checked) => setValue('gstCustomer', checked)}
-                        />
-                        <span className="text-sm text-muted-foreground">
+                      <label className="text-sm font-semibold text-foreground">GST Customer</label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setValue('gstCustomer', !gstCustomer)}
+                          className={cn(
+                            "relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2",
+                            gstCustomer ? "bg-gray-400" : "bg-gray-300"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform",
+                              gstCustomer ? "translate-x-8" : "translate-x-1"
+                            )}
+                          />
+                        </button>
+                        <span className="text-sm font-medium text-foreground">
                           {gstCustomer ? 'Yes' : 'No'}
                         </span>
                       </div>

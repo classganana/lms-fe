@@ -78,15 +78,20 @@ export default function AdminLoginPage() {
         setToken(token);
       }
 
-      // Redirect based on role
-      if (userRole === 'ADMIN') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/sales/dashboard');
-      }
+    
+
+      // Redirect based on role - using window.location for reliable navigation
+      const redirectUrl = userRole === 'ADMIN' ? '/admin/dashboard' : '/sales/dashboard';
+      window.location.href = redirectUrl;
+      
     } catch (err) {
-      console.error(err);
-      setError('Invalid email or password');
+      console.error('Login error:', err);
+      // Display the actual error message
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Invalid email or password');
+      }
     } finally {
       setLoading(false);
     }
