@@ -7,10 +7,13 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-  const { role, loadInfluencers, loadLeads, loadInteractions, loadSales } = useStore();
+  const { role, _hasHydrated, loadInfluencers, loadLeads, loadInteractions, loadSales } = useStore();
   const router = useRouter();
 
   useEffect(() => {
+    // Wait for hydration to finish before checking auth
+    if (!_hasHydrated) return;
+
     if (!role) {
       router.push('/login');
       return;
@@ -27,9 +30,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     };
     
     loadData();
-  }, [role, router, loadInfluencers, loadLeads, loadInteractions, loadSales]);
+  }, [role, _hasHydrated, router, loadInfluencers, loadLeads, loadInteractions, loadSales]);
 
-  if (!role) {
+  // Don't render anything until hydrated and authenticated
+  if (!_hasHydrated || !role) {
     return null;
   }
 

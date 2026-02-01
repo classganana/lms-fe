@@ -19,6 +19,7 @@ export interface SourceCode {
   status: 'ACTIVE' | 'INACTIVE';
   createdAt: string;
   updatedAt: string;
+  activatedAt?: string;
 }
 
 export interface Lead {
@@ -26,11 +27,19 @@ export interface Lead {
   mobile: string;
   name: string;
   state: string;
+  city?: string;
+  address?: string;
+  pincode?: string;
+  email?: string;
   influencerId: string;
+  sourceCode?: string;
   callStatus: 'CONNECTED' | 'NOT_CONNECTED' | 'BUSY' | 'WRONG_NUMBER';
   rating: number | null;
+  notes?: string;
   followUpDate: string | null;
   converted: boolean;
+  gstCustomer?: boolean;
+  salesAmount?: number | null;
   createdAt: string;
   updatedAt: string;
 }

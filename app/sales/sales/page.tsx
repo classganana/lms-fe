@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,11 +10,24 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStore } from '@/store';
 import { format } from 'date-fns';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { RefreshCcw } from 'lucide-react';
 
 export default function SalesPage() {
-  const { sales, leads, influencers, dateRange } = useStore();
+  const { sales, leads, influencers, dateRange, loadSales, loadLeads, loadInfluencers, openModal } = useStore();
   const [influencerFilter, setInfluencerFilter] = useState<string>('all');
   const [gstFilter, setGstFilter] = useState<string>('all');
+  const [mobileFilter, setMobileFilter] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('sales');
+
+  useEffect(() => {
+    loadInfluencers();
+    loadLeads();
+    loadSales();
+  }, [loadInfluencers, loadLeads, loadSales]);
+
+  // ... (keeping other useMemos same) ...
 
   // Sales History Filtering
   const filteredSales = useMemo(() => {
@@ -58,8 +71,15 @@ export default function SalesPage() {
       filtered = filtered.filter(s => !s.gst);
     }
 
+    if (mobileFilter) {
+      filtered = filtered.filter(s => {
+        const lead = leads.find(l => l.id === s.leadId);
+        return lead?.mobile?.includes(mobileFilter);
+      });
+    }
+
     return filtered;
-  }, [sales, dateRange, influencerFilter, gstFilter]);
+  }, [sales, dateRange, influencerFilter, gstFilter, mobileFilter, leads]);
 
   const totals = useMemo(() => {
     return {
@@ -117,7 +137,7 @@ export default function SalesPage() {
           <p className="text-muted-foreground">Manage sales records and view performance</p>
         </div>
 
-        <Tabs defaultValue="sales" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-3 mb-6">
             <TabsTrigger value="sales" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Sales History
@@ -131,18 +151,29 @@ export default function SalesPage() {
           </TabsList>
 
           <TabsContent value="sales" className="mt-0">
-            <Card className="shadow-lg border-0">
+            <Card className="shadow-lg border-0 bg-white">
               <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
                 <CardTitle className="text-xl font-semibold">Sales List</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">Filter and view sales data</p>
               </CardHeader>
               <CardContent className="p-6">
+              
+                
                 <div className="flex flex-wrap gap-4 mb-6">
+                   <div className="flex-1 min-w-[200px] max-w-sm">
+                        <Input
+                            placeholder="Filter by Mobile Number"
+                            value={mobileFilter}
+                            onChange={(e) => setMobileFilter(e.target.value)}
+                            className="bg-white"
+                        />
+                   </div>
+
                   <Select value={influencerFilter} onValueChange={setInfluencerFilter}>
-                    <SelectTrigger className="w-[200px]">
+                    <SelectTrigger className="w-[200px] bg-white">
                       <SelectValue placeholder="Filter by influencer" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-white">
                       <SelectItem value="all">All Influencers</SelectItem>
                       {influencers.map((inf) => (
                         <SelectItem key={inf.id} value={inf.id}>
@@ -153,10 +184,10 @@ export default function SalesPage() {
                   </Select>
 
                   <Select value={gstFilter} onValueChange={setGstFilter}>
-                    <SelectTrigger className="w-[200px]">
+                    <SelectTrigger className="w-[200px] bg-white">
                       <SelectValue placeholder="Filter by GST" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-white">
                       <SelectItem value="all">All</SelectItem>
                       <SelectItem value="yes">With GST</SelectItem>
                       <SelectItem value="no">Without GST</SelectItem>
@@ -182,7 +213,11 @@ export default function SalesPage() {
                           const lead = leads.find(l => l.id === sale.leadId);
                           const influencer = influencers.find(i => i.id === sale.influencerId);
                           return (
-                            <TableRow key={sale.id} className="hover:bg-muted/30 transition-colors">
+                            <TableRow 
+                              key={sale.id} 
+                              className="hover:bg-muted/30 transition-colors cursor-pointer"
+                              onClick={() => openModal(sale, 'sale')}
+                            >
                               <TableCell className="font-medium">{format(new Date(sale.saleDate), 'MMM dd, yyyy')}</TableCell>
                               <TableCell>{lead?.name || 'N/A'}</TableCell>
                               <TableCell className="font-mono text-sm">{lead?.mobile || 'N/A'}</TableCell>
@@ -198,8 +233,23 @@ export default function SalesPage() {
                         })
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                            No sales found
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <p>No sales found matching your filters</p>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => {
+                                  useStore.getState().setDateRange({ from: undefined, to: undefined });
+                                  setInfluencerFilter('all');
+                                  setGstFilter('all');
+                                }}
+                                className="mt-2"
+                              >
+                                <RefreshCcw className="mr-2 h-4 w-4" />
+                                Reset Filters
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}
@@ -243,7 +293,7 @@ export default function SalesPage() {
           </TabsContent>
 
           <TabsContent value="executives" className="mt-0">
-            <Card className="shadow-lg border-0">
+            <Card className="shadow-lg border-0 bg-white">
               <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
                 <CardTitle className="text-xl font-semibold">Sales Performance by State</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">Performance metrics grouped by state</p>
@@ -290,7 +340,7 @@ export default function SalesPage() {
           </TabsContent>
 
           <TabsContent value="influencers" className="mt-0">
-            <Card className="shadow-lg border-0">
+            <Card className="shadow-lg border-0 bg-white">
               <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
                 <CardTitle className="text-xl font-semibold">Influencer-wise Sales</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">Sales breakdown by influencer</p>
@@ -307,8 +357,25 @@ export default function SalesPage() {
                     </TableHeader>
                     <TableBody>
                       {influencerSales.length > 0 ? (
-                        influencerSales.map((inf, idx) => (
-                          <TableRow key={idx} className="hover:bg-muted/30 transition-colors">
+                        influencerSales.map((inf, idx) => {
+                          
+                          
+                          return (
+                          <TableRow 
+                            key={idx} 
+                            className="hover:bg-muted/30 transition-colors cursor-pointer"
+                            onClick={() => {
+                  
+                                const selectedInfluencer = influencers.find(i => i.name === inf.name);
+                                if (selectedInfluencer) {
+                                    setInfluencerFilter(selectedInfluencer.id);
+                                    setGstFilter('all');
+                                    setMobileFilter('');
+
+                                    setActiveTab('sales');
+                                }
+                            }}
+                          >
                             <TableCell className="font-medium">{inf.name}</TableCell>
                             <TableCell>
                               <Badge variant="secondary">{inf.sales}</Badge>
@@ -317,7 +384,7 @@ export default function SalesPage() {
                               ₹{inf.revenue.toLocaleString()}
                             </TableCell>
                           </TableRow>
-                        ))
+                        )})
                       ) : (
                         <TableRow>
                           <TableCell colSpan={3} className="text-center text-muted-foreground py-8">

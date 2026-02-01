@@ -9,7 +9,8 @@ import {
   Users, 
   PlusCircle, 
   ShoppingCart,
-  LogOut 
+  LogOut,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -21,6 +22,7 @@ export function Sidebar() {
   const adminMenuItems = [
     { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/admin/influencers', label: 'Influencers', icon: Users },
+    { href: '/admin/add-employee', label: 'Add Employee', icon: UserPlus },
     { href: '/sales/sales', label: 'Sales', icon: ShoppingCart },
   ];
 

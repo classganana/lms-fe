@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useStore } from '@/store';
 import { ArrowLeft } from 'lucide-react';
 
-export default function LoginPage() {
+export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ export default function LoginPage() {
       
       const token = data.token || data.access_token;
       const apiRole = data.role || (data.user && data.user.role);
-
+      
       // Strict Role Check based on Active Tab
       if (activeTab === 'admin') {
           if (apiRole !== 'ADMIN') {
@@ -52,7 +52,7 @@ export default function LoginPage() {
                throw new Error('Access Denied: Administrators must use the Admin Login.');
           }
       }
-      
+
       // Map API role to our Role type
       let userRole: 'ADMIN' | 'NON_ADMIN' = 'ADMIN';
       
@@ -95,7 +95,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
       <div className="w-full max-w-md">
-        
+        <Button 
+            variant="ghost" 
+            className="mb-4 pl-0 hover:bg-transparent hover:text-primary"
+            onClick={() => router.back()}
+        >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+        </Button>
+
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-primary shadow-lg mb-4">
             <span className="text-white font-bold text-2xl">L</span>

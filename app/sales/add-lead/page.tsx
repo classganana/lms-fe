@@ -36,13 +36,18 @@ const leadSchema = z.object({
   mobile: z.string().min(10, 'Mobile number must be 10 digits').max(10, 'Mobile number must be 10 digits'),
   name: z.string().min(1, 'Name is required'),
   state: z.string().min(1, 'State is required'),
+  city: z.string().min(1, 'City is required'),
+  address: z.string().min(1, 'Address is required'),
+  pincode: z.string().min(6, 'Pincode must be 6 digits'),
+  email: z.string().email('Invalid email address'),
   influencerId: z.string().min(1, 'Influencer is required'),
   callStatus: z.enum(callStatuses),
   rating: z.number().min(1).max(5).nullable(),
+  notes: z.string().optional(),
   followUpDate: z.date().nullable(),
   converted: z.boolean(),
-  saleAmount: z.number().min(0).optional(),
-  saleGst: z.boolean().optional(),
+  salesAmount: z.number().min(0).optional().nullable(),
+  gstCustomer: z.boolean().optional(),
 });
 
 type LeadFormData = z.infer<typeof leadSchema>;
@@ -68,13 +73,18 @@ export default function AddLeadPage() {
       mobile: '',
       name: '',
       state: '',
+      city: '',
+      address: '',
+      pincode: '',
+      email: '',
       influencerId: '',
       callStatus: 'CONNECTED',
       rating: null,
+      notes: '',
       followUpDate: null,
       converted: false,
-      saleAmount: 0,
-      saleGst: false,
+      salesAmount: null,
+      gstCustomer: false,
     },
   });
 
@@ -82,7 +92,7 @@ export default function AddLeadPage() {
   const converted = watch('converted');
   const followUpDate = watch('followUpDate');
   const rating = watch('rating');
-  const saleGst = watch('saleGst');
+  const gstCustomer = watch('gstCustomer');
 
   // Check for existing lead when mobile changes
   useEffect(() => {
@@ -101,10 +111,15 @@ export default function AddLeadPage() {
           // Auto-fill form
           setValue('name', existing.name);
           setValue('state', existing.state);
+          setValue('city', existing.city || '');
+          setValue('address', existing.address || '');
+          setValue('pincode', existing.pincode || '');
+          setValue('email', existing.email || '');
           setValue('influencerId', existing.influencerId);
           setInfluencerReadOnly(true);
           setValue('callStatus', existing.callStatus);
           setValue('rating', existing.rating);
+          setValue('notes', existing.notes || '');
           setValue('converted', existing.converted);
           if (existing.followUpDate) {
             setValue('followUpDate', new Date(existing.followUpDate));
@@ -130,10 +145,14 @@ export default function AddLeadPage() {
     try {
       let savedLead: Lead;
       
+      const selectedInfluencer = influencers.find(i => i.id === data.influencerId);
+      const activeSourceCode = selectedInfluencer?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || '';
+
       if (existingLead) {
         // Update existing lead
         await updateLead(existingLead.id, {
           ...data,
+          sourceCode: activeSourceCode,
           followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
         });
         // Reload leads to get updated lead
@@ -145,12 +164,16 @@ export default function AddLeadPage() {
         // Create new lead using store's addLead function
         savedLead = await addLead({
           ...data,
+          sourceCode: activeSourceCode,
           followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
+          salesAmount: data.salesAmount || null, 
+          gstCustomer: data.gstCustomer || false,
         });
       }
 
       // Create sale if converted is true and sale details are provided
-      if (data.converted && data.saleAmount && data.saleAmount > 0) {
+      // Note: If backend handles sale creation based on salesAmount in lead, this might be redundant or needed for consistency.
+      if (data.converted && data.salesAmount && data.salesAmount > 0) {
         // Check if sale already exists for this lead
         const { sales, addSale } = useStore.getState();
         const existingSale = sales.find(s => s.leadId === savedLead.id);
@@ -159,8 +182,8 @@ export default function AddLeadPage() {
           await addSale({
             leadId: savedLead.id,
             influencerId: savedLead.influencerId,
-            amount: data.saleAmount || 0,
-            gst: data.saleGst || false,
+            amount: data.salesAmount || 0,
+            gst: data.gstCustomer || false,
             saleDate: new Date().toISOString(),
           });
         }
@@ -274,6 +297,67 @@ export default function AddLeadPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">City <span className="text-destructive">*</span></label>
+                  <Input 
+                    {...register('city')} 
+                    placeholder="Bangalore"
+                    className={cn(
+                      "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary",
+                      errors.city && 'border-destructive'
+                    )}
+                  />
+                  {errors.city && (
+                    <p className="text-sm text-destructive font-medium">{errors.city.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Address <span className="text-destructive">*</span></label>
+                  <Input 
+                    {...register('address')} 
+                    placeholder="123 Main Street"
+                    className={cn(
+                      "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary",
+                      errors.address && 'border-destructive'
+                    )}
+                  />
+                  {errors.address && (
+                    <p className="text-sm text-destructive font-medium">{errors.address.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Pincode <span className="text-destructive">*</span></label>
+                  <Input 
+                    {...register('pincode')} 
+                    placeholder="560001"
+                    className={cn(
+                      "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary",
+                      errors.pincode && 'border-destructive'
+                    )}
+                  />
+                  {errors.pincode && (
+                    <p className="text-sm text-destructive font-medium">{errors.pincode.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Email <span className="text-destructive">*</span></label>
+                  <Input 
+                    {...register('email')} 
+                    placeholder="jane.doe@example.com"
+                    type="email"
+                    className={cn(
+                      "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary",
+                      errors.email && 'border-destructive'
+                    )}
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-destructive font-medium">{errors.email.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Influencer <span className="text-destructive">*</span></label>
                   <Select
                     value={watch('influencerId')}
@@ -298,6 +382,15 @@ export default function AddLeadPage() {
                   {errors.influencerId && (
                     <p className="text-sm text-destructive font-medium">{errors.influencerId.message}</p>
                   )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground">Source Code</label>
+                  <Input 
+                    value={activeInfluencers.find(i => i.id === watch('influencerId'))?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || ''}
+                    readOnly
+                    className="h-11 border-2 transition-colors hover:border-primary/50 bg-muted"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -348,6 +441,17 @@ export default function AddLeadPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">Notes</label>
+                  <Input 
+                    {...register('notes')} 
+                    placeholder="Enter notes here..."
+                    className={cn(
+                      "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-sm font-medium">Follow-up Date</label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -392,23 +496,23 @@ export default function AddLeadPage() {
                       <label className="text-sm font-medium">Sale Amount *</label>
                       <Input
                         type="number"
-                        {...register('saleAmount', { valueAsNumber: true })}
+                        {...register('salesAmount', { valueAsNumber: true })}
                         placeholder="50000"
                       />
-                      {errors.saleAmount && (
-                        <p className="text-sm text-destructive">{errors.saleAmount.message}</p>
+                      {errors.salesAmount && (
+                        <p className="text-sm text-destructive">{errors.salesAmount.message}</p>
                       )}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">GST</label>
+                      <label className="text-sm font-medium">GST Customer</label>
                       <div className="flex items-center space-x-2">
                         <Switch
-                          checked={saleGst}
-                          onCheckedChange={(checked) => setValue('saleGst', checked)}
+                          checked={gstCustomer}
+                          onCheckedChange={(checked) => setValue('gstCustomer', checked)}
                         />
                         <span className="text-sm text-muted-foreground">
-                          {saleGst ? 'Yes' : 'No'}
+                          {gstCustomer ? 'Yes' : 'No'}
                         </span>
                       </div>
                     </div>

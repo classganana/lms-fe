@@ -95,7 +95,7 @@ export default function LeadsPage() {
           <p className="text-muted-foreground">Manage and track your leads</p>
         </div>
 
-        <Card className="shadow-lg border-0">
+        <Card className="shadow-lg border-0 bg-white">
           <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>

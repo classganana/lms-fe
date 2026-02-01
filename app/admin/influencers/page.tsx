@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
 
 export default function AdminInfluencersPage() {
-  const { influencers, addSourceCode, addInfluencer } = useStore();
+  const { influencers, addSourceCode, addInfluencer, token } = useStore();
   const [selectedInfluencer, setSelectedInfluencer] = useState<string | null>(null);
   const [newCode, setNewCode] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -22,26 +22,60 @@ export default function AdminInfluencersPage() {
   const [addInfluencerOpen, setAddInfluencerOpen] = useState(false);
   const [newInfluencerName, setNewInfluencerName] = useState('');
 
+
+
   const handleAddInfluencer = async () => {
     if (!newInfluencerName.trim()) return;
-    await addInfluencer({
-      name: newInfluencerName.trim(),
-    });
-    setNewInfluencerName('');
-    setAddInfluencerOpen(false);
+
+    try {
+      if (!token) {
+         alert('Authentication token missing. Please login again.');
+         return;
+      }
+      const response = await fetch('http://18.61.48.70:3000/admin/influencers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: newInfluencerName.trim() }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create influencer');
+      }
+
+      await addInfluencer({
+        name: newInfluencerName.trim(),
+      });
+      setNewInfluencerName('');
+      setAddInfluencerOpen(false);
+    } catch (error) {
+      console.error('Error creating influencer:', error);
+      alert('Failed to add influencer. Please try again.');
+    }
   };
+
+
 
   const handleAddSourceCode = async () => {
     if (!selectedInfluencer || !newCode.trim()) return;
-    await addSourceCode(selectedInfluencer, newCode.trim());
-    setNewCode('');
-    setDialogOpen(false);
-    setSelectedInfluencer(null);
+    try {
+        await addSourceCode(selectedInfluencer, newCode.trim());
+        setNewCode('');
+        setDialogOpen(false);
+        setSelectedInfluencer(null);
+    } catch (error: any) {
+        alert(error.message || 'Failed to add source code');
+    }
   };
+
+  // Debug: Log influencers to check data structure
+  console.log('Current Influencers State:', influencers);
 
   const activeInfluencers = influencers.map(inf => ({
     ...inf,
-    sourceCodes: inf.sourceCodes.filter(sc => sc.status === 'ACTIVE'),
+    sourceCodes: inf.sourceCodes?.filter(sc => sc.status === 'ACTIVE') || [],
   }));
 
   return (
@@ -52,6 +86,9 @@ export default function AdminInfluencersPage() {
             <h1 className="text-4xl font-bold tracking-tight mb-2">Influencers</h1>
             <p className="text-muted-foreground">Manage influencer source codes and history</p>
           </div>
+          
+
+
           <Dialog open={addInfluencerOpen} onOpenChange={setAddInfluencerOpen}>
             <DialogTrigger asChild>
               <Button size="lg" className="bg-blue-600 hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-blue-200">
@@ -166,8 +203,7 @@ export default function AdminInfluencersPage() {
                             <TableRow className="bg-muted/50">
                               <TableHead>Code</TableHead>
                               <TableHead>Status</TableHead>
-                              <TableHead>Created</TableHead>
-                              <TableHead>Updated</TableHead>
+                              <TableHead>Activated</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -176,7 +212,7 @@ export default function AdminInfluencersPage() {
                               ?.sourceCodes.length ? (
                                 influencers
                                 .find(i => i.id === influencer.id)
-                                ?.sourceCodes.map((sc) => (
+                                ?.sourceCodes.map((sc: any) => (
                                   <TableRow key={sc.id}>
                                     <TableCell className="font-medium">{sc.code}</TableCell>
                                     <TableCell>
@@ -185,16 +221,15 @@ export default function AdminInfluencersPage() {
                                       </Badge>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">
-                                      {format(new Date(sc.createdAt), 'MMM dd, yyyy')}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                      {format(new Date(sc.updatedAt), 'MMM dd, yyyy')}
+                                      {sc.activatedAt && !isNaN(new Date(sc.activatedAt).getTime()) 
+                                        ? format(new Date(sc.activatedAt), 'MMM dd, yyyy')
+                                        : '-'}
                                     </TableCell>
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                                  <TableCell colSpan={3} className="text-center text-muted-foreground py-4">
                                     No history available
                                   </TableCell>
                                 </TableRow>

@@ -49,7 +49,7 @@ export function DetailModal() {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={closeModal}>
-      <DialogContent className="max-w-6xl max-h-[95vh] p-0 gap-0">
+      <DialogContent className="max-w-6xl max-h-[95vh] p-0 gap-0 bg-white">
         <DialogHeader className="px-8 py-5 border-b bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50">
           <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             {getTitle()}
@@ -195,37 +195,91 @@ function InteractionDetails({ interaction }: { interaction: LeadInteraction }) {
 }
 
 function SaleDetails({ sale }: { sale: Sale }) {
+  const { leads, influencers } = useStore();
+  const lead = leads.find(l => l.id === sale.leadId);
+  const influencer = influencers.find(i => i.id === sale.influencerId);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
-        <div>
-          <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
-          <p className="text-4xl font-bold text-green-600">₹{sale.amount.toLocaleString()}</p>
+      {/* Header Stats */}
+      <div className="flex bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200 p-6 shadow-sm">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-emerald-800 mb-1">Total Sales Amount</p>
+          <p className="text-4xl font-bold text-emerald-600">₹{sale.amount.toLocaleString()}</p>
         </div>
-        {sale.gst && (
-          <Badge className="bg-blue-100 text-blue-700 border-0 text-lg px-4 py-2">
-            GST Applicable
+        <div className="flex flex-col items-end gap-2">
+           <Badge className={`${sale.gst ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-500 hover:bg-slate-600'} text-white border-0 text-sm px-4 py-1.5`}>
+            {sale.gst ? 'GST Included' : 'No GST'}
           </Badge>
-        )}
+          <span className="text-xs text-muted-foreground font-mono">ID: {sale.id}</span>
+        </div>
       </div>
 
       <Separator />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard icon={User} label="Sale ID" value={sale.id} />
-        <InfoCard icon={User} label="Lead ID" value={sale.leadId} />
-        <InfoCard icon={User} label="Influencer ID" value={sale.influencerId} />
+      {/* Main Details Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Customer Information */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
+            <User className="h-5 w-5 text-blue-500" />
+            Customer Details
+          </h3>
+          <div className="grid gap-3 pl-1">
+             <InfoCard icon={User} label="Name" value={lead?.name || 'Unknown'} valueClass="font-bold text-slate-900" />
+             <InfoCard icon={Phone} label="Mobile" value={lead?.mobile || 'N/A'} valueClass="font-mono text-slate-700" />
+             <InfoCard icon={User} label="Email" value={lead?.email || 'N/A'} />
+          </div>
+        </div>
+
+        {/* Location & Source */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
+            <MapPin className="h-5 w-5 text-rose-500" />
+            Location & Source
+          </h3>
+           <div className="grid gap-3 pl-1">
+             <div className="grid grid-cols-2 gap-3">
+               <InfoCard icon={MapPin} label="State" value={lead?.state || 'N/A'} />
+               <InfoCard icon={MapPin} label="City" value={lead?.city || 'N/A'} />
+             </div>
+             <InfoCard icon={MapPin} label="Address" value={`${lead?.address || ''} ${lead?.pincode ? `- ${lead.pincode}` : ''}` || 'N/A'} />
+             <InfoCard icon={User} label="Influencer" value={influencer?.name || 'Direct / ID:' + sale.influencerId} />
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Additional Info */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <InfoCard 
           icon={Calendar} 
           label="Sale Date" 
           value={format(new Date(sale.saleDate), 'MMM dd, yyyy')} 
         />
         <InfoCard 
-          icon={Calendar} 
-          label="Created At" 
-          value={format(new Date(sale.createdAt), 'MMM dd, yyyy HH:mm')} 
+          icon={Star} 
+          label="Rating" 
+          value={lead?.rating ? `${lead.rating} / 5` : 'Not Rated'} 
+        />
+        <InfoCard 
+          icon={Phone} 
+          label="Call Status" 
+          value={lead?.callStatus || 'N/A'} 
         />
       </div>
+
+      {/* Notes Section */}
+      {lead?.notes && (
+        <div className="bg-slate-50 border rounded-lg p-4 mt-2">
+           <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+             <TrendingUp className="h-4 w-4" />
+             Notes
+           </h4>
+           <p className="text-slate-600 text-sm leading-relaxed">{lead.notes}</p>
+        </div>
+      )}
     </div>
   );
 }
