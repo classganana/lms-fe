@@ -1,13 +1,14 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, Suspense } from 'react';
+
 import { useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+
 import { useStore } from '@/store';
 import { format } from 'date-fns';
 import { User, Phone, MapPin, Star, Calendar, CheckCircle, Clock } from 'lucide-react';
@@ -15,8 +16,8 @@ import { cn } from '@/lib/utils';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 
 
-export default function LeadsPage() {
-  const { leads, dateRange, setDateRange, openModal } = useStore();
+function LeadsContent() {
+  const { leads, dateRange, openModal } = useStore();
   const searchParams = useSearchParams();
   
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -27,6 +28,7 @@ export default function LeadsPage() {
     const status = searchParams.get('status');
     const rating = searchParams.get('rating');
     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (status) setStatusFilter(status);
     if (rating) setRatingFilter(rating);
   }, [searchParams]);
@@ -222,5 +224,19 @@ export default function LeadsPage() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </MainLayout>
+    }>
+      <LeadsContent />
+    </Suspense>
   );
 }
