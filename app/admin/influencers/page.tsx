@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,10 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { useStore } from '@/store';
 import { format } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 
 export default function AdminInfluencersPage() {
-  const { influencers, addSourceCode, addInfluencer, token } = useStore();
   const [selectedInfluencer, setSelectedInfluencer] = useState<string | null>(null);
   const [newCode, setNewCode] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -21,6 +20,17 @@ export default function AdminInfluencersPage() {
   // Add Influencer State
   const [addInfluencerOpen, setAddInfluencerOpen] = useState(false);
   const [newInfluencerName, setNewInfluencerName] = useState('');
+
+  // Edit Influencer State
+  const [editInfluencerOpen, setEditInfluencerOpen] = useState(false);
+  const [editingInfluencer, setEditingInfluencer] = useState<{ id: string, name: string } | null>(null);
+  const [editName, setEditName] = useState('');
+
+  const { influencers, addSourceCode, addInfluencer, updateInfluencer, deleteInfluencer, loadInfluencers, token } = useStore();
+
+  useEffect(() => {
+    loadInfluencers();
+  }, [loadInfluencers]);
 
 
 
@@ -67,6 +77,27 @@ export default function AdminInfluencersPage() {
         setSelectedInfluencer(null);
     } catch (error: any) {
         alert(error.message || 'Failed to add source code');
+    }
+  };
+
+  const handleUpdateInfluencer = async () => {
+    if (!editingInfluencer || !editName.trim()) return;
+    try {
+      await updateInfluencer(editingInfluencer.id, { name: editName.trim() });
+      setEditInfluencerOpen(false);
+      setEditingInfluencer(null);
+      setEditName('');
+    } catch (error: any) {
+      alert(error.message || 'Failed to update influencer');
+    }
+  };
+
+  const handleDeleteInfluencer = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete influencer "${name}"?`)) return;
+    try {
+      await deleteInfluencer(id);
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete influencer');
     }
   };
 
@@ -132,50 +163,73 @@ export default function AdminInfluencersPage() {
                 <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-semibold">{influencer.name}</CardTitle>
-                    <Dialog open={dialogOpen && selectedInfluencer === influencer.id} onOpenChange={(open) => {
-                      setDialogOpen(open);
-                      if (!open) {
-                        setSelectedInfluencer(null);
-                        setNewCode('');
-                      }
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedInfluencer(influencer.id);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          Add Source Code
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="bg-white">
-                        <DialogHeader>
-                          <DialogTitle>Add Source Code</DialogTitle>
-                          <DialogDescription>
-                            Add a new source code for {influencer.name}
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <Input
-                            placeholder="Source Code"
-                            value={newCode}
-                            onChange={(e) => setNewCode(e.target.value)}
-                          />
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                            Cancel
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        onClick={() => {
+                          setEditingInfluencer({ id: influencer.id, name: influencer.name });
+                          setEditName(influencer.name);
+                          setEditInfluencerOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDeleteInfluencer(influencer.id, influencer.name)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <div className="w-px h-6 bg-slate-200 mx-1" />
+                      <Dialog open={dialogOpen && selectedInfluencer === influencer.id} onOpenChange={(open) => {
+                        setDialogOpen(open);
+                        if (!open) {
+                          setSelectedInfluencer(null);
+                          setNewCode('');
+                        }
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedInfluencer(influencer.id);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Source Code
                           </Button>
-                          <Button onClick={handleAddSourceCode}>
-                            Add
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogTrigger>
+                        <DialogContent className="bg-white">
+                          <DialogHeader>
+                            <DialogTitle>Add Source Code</DialogTitle>
+                            <DialogDescription>
+                              Add a new source code for {influencer.name}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <Input
+                              placeholder="Source Code"
+                              value={newCode}
+                              onChange={(e) => setNewCode(e.target.value)}
+                            />
+                          </div>
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button onClick={handleAddSourceCode}>
+                              Add
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -250,6 +304,36 @@ export default function AdminInfluencersPage() {
              </div>
           )}
         </div>
+
+        {/* Edit Influencer Dialog */}
+        <Dialog open={editInfluencerOpen} onOpenChange={setEditInfluencerOpen}>
+          <DialogContent className="bg-white">
+            <DialogHeader>
+              <DialogTitle>Edit Influencer</DialogTitle>
+              <DialogDescription>
+                Update influencer details.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Influencer Name</label>
+                <Input
+                  placeholder="e.g. Rahul Sharma"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditInfluencerOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateInfluencer} disabled={!editName.trim()}>
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

@@ -42,6 +42,7 @@ export interface Lead {
   salesAmount?: number | null;
   createdAt: string;
   updatedAt: string;
+  createdBy?: string;
 }
 
 export interface LeadInteraction {

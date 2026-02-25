@@ -113,33 +113,31 @@ export function DateRangePicker({
             id="date"
             variant={'outline'}
             className={cn(
-              'w-[300px] justify-start text-left font-normal relative group hover:bg-slate-50 transition-all border shadow-sm rounded-lg',
+              'w-[260px] justify-start text-left font-normal relative group h-9 px-3 text-sm hover:bg-accent hover:text-accent-foreground transition-all shadow-sm',
               !dateRange.from && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+            <CalendarIcon className="mr-2 h-4 w-4 opacity-50" />
             {dateRange.from ? (
               dateRange.to ? (
-                <span className="font-semibold text-slate-700">
+                <>
                   {format(dateRange.from, 'LLL dd, y')} -{' '}
                   {format(dateRange.to, 'LLL dd, y')}
-                </span>
+                </>
               ) : (
-                <span className="font-semibold text-slate-700">
-                  {format(dateRange.from, 'LLL dd, y')}
-                </span>
+                format(dateRange.from, 'LLL dd, y')
               )
             ) : (
-              <span className="text-slate-500">Pick a date range</span>
+              <span>Pick a date range</span>
             )}
             
             {(dateRange.from || dateRange.to) && (
               <div 
                 role="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-slate-200 text-slate-400 transition-all"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={clearDates}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </div>
             )}
           </Button>

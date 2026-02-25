@@ -27,6 +27,7 @@ interface Store {
   leads: Lead[];
   interactions: LeadInteraction[];
   sales: Sale[];
+  users: User[];
 
   // Modal state
   selectedItem: Influencer | Lead | LeadInteraction | Sale | null;
@@ -43,8 +44,10 @@ interface Store {
   loadLeads: () => Promise<void>;
   loadInteractions: () => Promise<void>;
   loadSales: () => Promise<void>;
+  loadUsers: () => Promise<void>;
   addLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Lead>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
+  deleteLead: (id: string) => Promise<void>;
   addSale: (sale: Omit<Sale, 'id' | 'createdAt'>) => Promise<void>;
   addSourceCode: (influencerId: string, code: string) => Promise<void>;
   addInfluencer: (influencer: Omit<Influencer, 'id' | 'sourceCodes'>) => Promise<void>;
@@ -83,6 +86,7 @@ export const useStore = create<Store>()(
       leads: [],
       interactions: [],
       sales: [],
+      users: [],
 
       // Modal state
       selectedItem: null,
@@ -95,6 +99,21 @@ export const useStore = create<Store>()(
       closeModal: () => set({ selectedItem: null, selectedItemType: null, selectedItems: null, selectedItemsType: null, isModalOpen: false }),
 
       // Actions
+      loadUsers: async () => {
+        try {
+          const { token } = get();
+          if (!token) return;
+          const response = await fetch('http://18.61.48.70:3000/admin/users', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!response.ok) throw new Error('Failed to fetch users');
+          const data = await response.json();
+          set({ users: Array.isArray(data) ? data : [] });
+        } catch (error) {
+          console.error('Error loading users:', error);
+        }
+      },
+
       loadInfluencers: async () => {
         try {
           const { token } = get();
@@ -123,7 +142,7 @@ export const useStore = create<Store>()(
           set({ influencers: safeData });
         } catch (error) {
           console.error('Error loading influencers:', error);
-         
+
         }
       },
 
@@ -133,7 +152,7 @@ export const useStore = create<Store>()(
           // Construct URL with query parameters if needed
           let url = 'http://18.61.48.70:3000/sales/leads';
 
-     
+
           const headers: HeadersInit = {
             'Content-Type': 'application/json'
           };
@@ -144,7 +163,7 @@ export const useStore = create<Store>()(
           const response = await fetch(url, { headers });
           if (!response.ok) {
             console.warn('Failed to fetch leads from API, falling back to fakeApi or empty');
-         
+
             console.error(`Failed to fetch leads: ${response.status}`);
             return;
           }
@@ -242,8 +261,52 @@ export const useStore = create<Store>()(
       },
 
       updateLead: async (id, updates) => {
-        await fakeApi.updateLead(id, updates);
-        await get().loadLeads();
+        try {
+          const { token, leads } = get();
+          if (!token) throw new Error('No auth token');
+
+          // Use database ID for update and delete as per latest backend requirement
+          const response = await fetch(`http://18.61.48.70:3000/sales/leads/${id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(updates)
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Failed to update lead: ${response.status} ${errText}`);
+          }
+          await get().loadLeads();
+        } catch (error) {
+          console.error('Update lead error:', error);
+          throw error;
+        }
+      },
+
+      deleteLead: async (id) => {
+        try {
+          const { token, leads } = get();
+          if (!token) throw new Error('No auth token');
+
+          const response = await fetch(`http://18.61.48.70:3000/sales/leads/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Failed to delete lead: ${response.status} ${errText}`);
+          }
+          await get().loadLeads();
+        } catch (error) {
+          console.error('Delete lead error:', error);
+          throw error;
+        }
       },
 
       addSale: async (sale) => {
@@ -293,8 +356,8 @@ export const useStore = create<Store>()(
           if (!token) throw new Error('No auth token');
 
           console.log(`Deleting influencer with ID: ${id}`);
-          // Attempting both Path parameter and Query parameter styles just in case
-          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}?id=${id}`, {
+          // Using path parameter only as per standard REST and user request
+          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -319,8 +382,8 @@ export const useStore = create<Store>()(
           if (!token) throw new Error('No auth token');
 
           console.log(`Updating influencer with ID: ${id}`);
-          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}?id=${id}`, {
-            method: 'PATCH',
+          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}`, {
+            method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
