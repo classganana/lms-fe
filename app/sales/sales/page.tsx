@@ -113,7 +113,12 @@ export default function SalesPage() {
 
   // Sales History Filtering
   const filteredSales = useMemo(() => {
-    let filtered = [...sales];
+    // START: Always show only converted leads
+    let filtered = sales.filter(s => {
+      const lead = leads.find(l => l.id === s.leadId);
+      return lead?.converted === true;
+    });
+    // END: Always show only converted leads
 
     // Date filter
     if (dateRange.from || dateRange.to) {
@@ -188,16 +193,6 @@ export default function SalesPage() {
       });
     }
 
-    // Converted Filter (Indirectly via Lead - though Sales imply converted usually, sometimes we might track non-converted sales attempts if logic changes, but typically Sales = Converted. The user asked for it though.)
-    if (convertedFilter !== 'all') {
-       // Note: All items in 'sales' array are usually converted. 
-       // However, we check the lead's converted status just in case.
-       filtered = filtered.filter(s => {
-         const lead = leads.find(l => l.id === s.leadId);
-         return lead?.converted === convertedFilter;
-       });
-    }
-
     // Amount Range Filter
     if (minAmount) {
       filtered = filtered.filter(s => s.amount >= Number(minAmount));
@@ -223,7 +218,7 @@ export default function SalesPage() {
     }
 
     return filtered;
-  }, [sales, dateRange, influencerFilter, salesPersonFilter, gstFilter, mobileFilter, nameFilter, leads, callStatusFilter, ratingFilter, convertedFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter]);
+  }, [sales, dateRange, influencerFilter, salesPersonFilter, gstFilter, mobileFilter, nameFilter, leads, callStatusFilter, ratingFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter]);
 
   const totalPages = Math.ceil(filteredSales.length / ITEMS_PER_PAGE);
   const paginatedSales = useMemo(() => {
@@ -1018,6 +1013,7 @@ export default function SalesPage() {
             </DialogHeader>
             <LeadForm 
               initialMobile={editingLead?.mobile} 
+              initialData={editingLead || undefined}
               onSuccess={() => {
                 setIsEditDialogOpen(false);
                 loadSales();

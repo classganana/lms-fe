@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store';
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { User, MapPin, Phone, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export default function SalesDashboardPage() {
   const { leads, sales, dateRange, openListModal, loadLeads, loadSales } = useStore();
@@ -56,6 +59,18 @@ export default function SalesDashboardPage() {
     if (options?.rating) params.set('rating', options.rating);
     router.push(`/leads?${params.toString()}`);
   };
+
+  const todayFollowUps = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return leads.filter(l => {
+      if (!l.followUpDate) return false;
+      const fDate = new Date(l.followUpDate);
+      fDate.setHours(0, 0, 0, 0);
+      return fDate.getTime() === today.getTime();
+    });
+  }, [leads]);
 
   return (
     <MainLayout>
@@ -178,6 +193,21 @@ export default function SalesDashboardPage() {
             <CardContent>
               <div className="text-4xl font-bold mb-1 text-red-600">{nonInterestedLeads}</div>
               <p className="text-xs text-muted-foreground">Rating ≤ 2</p>
+            </CardContent>
+          </Card>
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-pink-500 cursor-pointer"
+            onClick={() => router.push('/leads?view=today_followup')}
+          >
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Today Follow-up
+              </CardTitle>
+              <Calendar className="h-4 w-4 text-pink-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold mb-1 text-pink-600">{todayFollowUps.length}</div>
+              <p className="text-xs text-muted-foreground">Scheduled for today</p>
             </CardContent>
           </Card>
         </div>

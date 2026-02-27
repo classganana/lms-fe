@@ -38,6 +38,8 @@ export interface Lead {
   notes?: string;
   followUpDate: string | null;
   converted: boolean;
+  gst?: boolean;
+  gstStatus?: 'YES' | 'NO';
   gstCustomer?: boolean;
   salesAmount?: number | null;
   createdAt: string;

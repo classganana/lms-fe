@@ -52,12 +52,13 @@ type LeadFormData = z.infer<typeof leadSchema>;
 
 interface LeadFormProps {
   initialMobile?: string;
+  initialData?: Lead;
   onSuccess?: () => void;
   onCancel?: () => void;
   showCardWrapper?: boolean;
 }
 
-export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper = true }: LeadFormProps) {
+export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, showCardWrapper = true }: LeadFormProps) {
   const router = useRouter();
   const { influencers, users, addLead, updateLead, loadLeads, loadUsers } = useStore();
   const [originalLead, setOriginalLead] = useState<Lead | null>(null);
@@ -82,7 +83,7 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
   } = useForm<LeadFormData>({
     resolver: zodResolver(leadSchema),
     defaultValues: {
-      mobile: initialMobile || '',
+      mobile: initialMobile || initialData?.mobile || '',
       name: '',
       state: '',
       city: '',
@@ -109,20 +110,51 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
   // Check for existing lead
   useEffect(() => {
     const checkLead = async () => {
+      const isTrue = (val: any) => val === true || val === 'true' || val === 1 || val === '1';
+
       // 1. Initial load for Edit Mode
-      if (isInitialLoad && initialMobile) {
-        await loadLeads();
-        const found = useStore.getState().leads.find(l => l.mobile === initialMobile);
+      if (isInitialLoad && (initialMobile || initialData)) {
+        let found = initialData;
+
+        if (!found && initialMobile) {
+          await loadLeads();
+          const { leads } = useStore.getState();
+          found = leads.find((l) => l.mobile === initialMobile);
+        }
+
         if (found) {
           setOriginalLead(found);
-          // Fill form with original data
-          Object.keys(found).forEach((key) => {
-             if (key === 'followUpDate' && found[key]) {
-               setValue('followUpDate', new Date(found[key] as string));
-             } else if (key in leadSchema.shape) {
-               setValue(key as any, found[key as keyof Lead]);
-             }
+          const backendAmount = Number((found as any).salesAmount || (found as any).amount || 0);
+          const isConverted = isTrue(found.converted) || backendAmount > 0;
+
+          // Type-safe way to iterate and set values
+          const leadKeys = Object.keys(found) as Array<keyof Lead | 'amount' | 'gst'>;
+          leadKeys.forEach((key) => {
+            const value = (found as any)[key];
+            if (key === 'followUpDate' && value) {
+              setValue('followUpDate', new Date(value as string));
+            } else if (key in leadSchema.shape) {
+              if (key === 'converted') {
+                setValue('converted', isConverted);
+              } else if (key === 'gstCustomer') {
+                setValue('gstCustomer', isTrue(value));
+              } else {
+                setValue(key as any, value);
+              }
+            }
           });
+
+          setValue('converted', isConverted);
+          if (backendAmount > 0) {
+            setValue('salesAmount', backendAmount);
+          }
+
+          if ((found as any).gstStatus !== undefined) {
+            setValue('gstCustomer', (found as any).gstStatus === 'YES');
+          } else if ((found as any).gst !== undefined) {
+            setValue('gstCustomer', isTrue((found as any).gst));
+          }
+
           if (found.influencerId) setInfluencerReadOnly(true);
         }
         setIsInitialLoad(false);
@@ -131,27 +163,45 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
 
       // 2. Add Mode or changing number in Edit Mode
       if (mobile && mobile.length === 10) {
-        // Don't search for current original lead
         if (originalLead && mobile === originalLead.mobile) {
-            setDiscoveredLead(null);
-            setShowAlert(false);
-            return;
+          setDiscoveredLead(null);
+          setShowAlert(false);
+          return;
         }
 
-        const found = useStore.getState().leads.find(l => l.mobile === mobile);
+        const { leads } = useStore.getState();
+        const found = leads.find((l) => l.mobile === mobile);
         if (found) {
           setDiscoveredLead(found);
           setShowAlert(true);
-          // Auto-fill form from discovered lead if in ADD mode
           if (!originalLead) {
-             Object.keys(found).forEach((key) => {
-                if (key === 'followUpDate' && found[key]) {
-                  setValue('followUpDate', new Date(found[key] as string));
-                } else if (key in leadSchema.shape) {
-                   setValue(key as any, found[key as keyof Lead]);
+            const backendAmount = Number((found as any).salesAmount || (found as any).amount || 0);
+            const isConverted = isTrue(found.converted) || backendAmount > 0;
+
+            const leadKeys = Object.keys(found) as Array<keyof Lead | 'amount' | 'gst'>;
+            leadKeys.forEach((key) => {
+              const value = (found as any)[key];
+              if (key === 'followUpDate' && value) {
+                setValue('followUpDate', new Date(value as string));
+              } else if (key in leadSchema.shape) {
+                if (key === 'converted') {
+                  setValue('converted', isConverted);
+                } else if (key === 'gstCustomer') {
+                  setValue('gstCustomer', isTrue(value));
+                } else {
+                  setValue(key as any, value);
                 }
-             });
-             setInfluencerReadOnly(true);
+              }
+            });
+
+            setValue('converted', isConverted);
+            if (backendAmount > 0) {
+              setValue('salesAmount', backendAmount);
+            }
+            if ((found as any).gst !== undefined) {
+              setValue('gstCustomer', isTrue((found as any).gst));
+            }
+            setInfluencerReadOnly(true);
           }
         } else {
           setDiscoveredLead(null);
@@ -164,7 +214,7 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
     };
 
     checkLead();
-  }, [mobile, initialMobile, setValue, loadLeads, isInitialLoad, originalLead]);
+  }, [mobile, initialMobile, initialData, setValue, loadLeads, isInitialLoad, originalLead]);
 
 
   const activeInfluencers = influencers.map(inf => ({
@@ -179,45 +229,58 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
       const selectedInfluencer = influencers.find(i => i.id === data.influencerId);
       const activeSourceCode = selectedInfluencer?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || '';
 
+      const payload: any = {
+        name: data.name || '',
+        mobile: data.mobile,
+        state: data.state || '',
+        city: data.city || '',
+        address: data.address || '',
+        pincode: data.pincode || '',
+        email: data.email || '',
+        influencerId: data.influencerId,
+        callStatus: data.callStatus,
+        rating: Number(data.rating) || 0,
+        notes: data.notes || '',
+        converted: data.converted,
+        amount: Number(data.salesAmount) || 0,
+        gst: Boolean(data.gstCustomer),
+        gstStatus: data.gstCustomer ? 'YES' : 'NO', // Send as 'YES'/'NO' strings
+        // Mapping back to what frontend expects in the store to avoid UI flickering
+        salesAmount: Number(data.salesAmount) || 0,
+        gstCustomer: Boolean(data.gstCustomer)
+      };
+
+      if (data.followUpDate) {
+        payload.followUpDate = data.followUpDate.toISOString();
+      } else {
+        payload.followUpDate = null;
+      }
+
+      console.log('🚀 Preparing to save lead. ID:', originalLead?.id || 'NEW');
+      console.log('📦 Content:', payload);
+
       if (originalLead) {
         // Update existing lead (Edit Mode)
-        await updateLead(originalLead.id, {
-          ...data,
-          sourceCode: activeSourceCode,
-          followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
-        });
+        await updateLead(originalLead.id, payload);
         savedLead = { 
           ...originalLead, 
-          ...data, 
-          followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
+          ...data,
+          followUpDate: payload.followUpDate,
           updatedAt: new Date().toISOString() 
-        };
+        } as Lead;
       } else if (discoveredLead) {
         // Update discovered lead (Add Mode turned into Edit)
-        await updateLead(discoveredLead.id, {
-          ...data,
-          sourceCode: activeSourceCode,
-          followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
-        });
+        await updateLead(discoveredLead.id, payload);
         savedLead = { 
           ...discoveredLead, 
           ...data, 
-          followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
+          followUpDate: payload.followUpDate,
           updatedAt: new Date().toISOString() 
-        };
+        } as Lead;
       } else {
         // Create new lead
-        savedLead = await addLead({
-          ...data,
-          sourceCode: activeSourceCode,
-          followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
-          salesAmount: data.salesAmount || null, 
-          gstCustomer: data.gstCustomer || false,
-        });
+        savedLead = await addLead(payload);
       }
-
-
-
 
       // Create sale if converted is true and sale details are provided
       if (data.converted && data.salesAmount && data.salesAmount > 0) {
@@ -523,8 +586,8 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
               type="button"
               onClick={() => setValue('converted', !converted)}
               className={cn(
-                "relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2",
-                converted ? "bg-gray-400" : "bg-gray-300"
+                "relative inline-flex h-7 w-14 items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                converted ? "bg-emerald-500" : "bg-slate-300"
               )}
             >
               <span
@@ -534,7 +597,7 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
                 )}
               />
             </button>
-            <span className="text-sm font-medium text-foreground">
+            <span className={cn("text-sm font-semibold transition-colors", converted ? "text-emerald-600" : "text-slate-500")}>
               {converted ? 'Yes' : 'No'}
             </span>
           </div>
@@ -547,8 +610,8 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
               type="button"
               onClick={() => setValue('gstCustomer', !gstCustomer)}
               className={cn(
-                "relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2",
-                gstCustomer ? "bg-gray-400" : "bg-gray-300"
+                "relative inline-flex h-7 w-14 items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+                gstCustomer ? "bg-blue-500" : "bg-slate-300"
               )}
             >
               <span
@@ -558,7 +621,7 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
                 )}
               />
             </button>
-            <span className="text-sm font-medium text-foreground">
+            <span className={cn("text-sm font-semibold transition-colors", gstCustomer ? "text-blue-600" : "text-slate-500")}>
               {gstCustomer ? 'Yes' : 'No'}
             </span>
           </div>
@@ -645,4 +708,3 @@ export function LeadForm({ initialMobile, onSuccess, onCancel, showCardWrapper =
     </div>
   );
 }
-

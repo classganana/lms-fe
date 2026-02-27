@@ -168,10 +168,13 @@ export const useStore = create<Store>()(
             return;
           }
           const data = await response.json();
-          // Ensure data is array and normalize IDs
+          // Ensure data is array and normalize IDs and GST field
           const cleanData = Array.isArray(data) ? data.map((l: any) => ({
             ...l,
             id: String(l.id || l._id),
+            gstCustomer: l.gstStatus !== undefined ? l.gstStatus === 'YES' :
+              (l.gstCustomer !== undefined ? l.gstCustomer :
+                (l.gst !== undefined ? l.gst : false)),
           })) : [];
           set({ leads: cleanData });
         } catch (error) {
@@ -211,7 +214,7 @@ export const useStore = create<Store>()(
             leadId: String(item.id || item._id), // mapping lead itself as the relation
             influencerId: item.influencerId || '',
             amount: Number(item.salesAmount || item.amount || 0),
-            gst: item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
+            gst: item.gstStatus === 'YES' || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
             saleDate: item.updatedAt || item.createdAt || new Date().toISOString(),
             createdAt: item.createdAt || new Date().toISOString()
           })) : [];
@@ -250,8 +253,15 @@ export const useStore = create<Store>()(
             throw new Error(`Failed to add lead: ${response.status} ${errorText}`);
           }
 
-          const newLead = await response.json();
-          // Update local state directly since loadLeads might still be using fakeApi
+          const rawLead = await response.json();
+          const newLead = {
+            ...rawLead,
+            id: String(rawLead.id || rawLead._id),
+            gstCustomer: rawLead.gstStatus !== undefined ? rawLead.gstStatus === 'YES' :
+              (rawLead.gstCustomer !== undefined ? rawLead.gstCustomer :
+                (rawLead.gst !== undefined ? rawLead.gst : false)),
+          };
+          // Update local state directly
           set((state) => ({ leads: [...state.leads, newLead] }));
           return newLead;
         } catch (error) {
@@ -262,10 +272,15 @@ export const useStore = create<Store>()(
 
       updateLead: async (id, updates) => {
         try {
-          const { token, leads } = get();
-          if (!token) throw new Error('No auth token');
+          const { token } = get();
+          if (!token) {
+            console.error('Update lead failed: No auth token found in store');
+            throw new Error('No auth token');
+          }
 
-          // Use database ID for update and delete as per latest backend requirement
+          console.log(`📡 PATCH Request: http://18.61.48.70:3000/sales/leads/${id}`);
+          console.log('📦 Payload:', updates);
+
           const response = await fetch(`http://18.61.48.70:3000/sales/leads/${id}`, {
             method: 'PATCH',
             headers: {
@@ -275,11 +290,17 @@ export const useStore = create<Store>()(
             body: JSON.stringify(updates)
           });
 
+          console.log('🏁 Response Status:', response.status);
+
           if (!response.ok) {
             const errText = await response.text();
+            console.error('❌ Update Error Response:', errText);
             throw new Error(`Failed to update lead: ${response.status} ${errText}`);
           }
+
+          console.log('✅ Lead updated successfully');
           await get().loadLeads();
+          await get().loadSales(); // Also refresh sales to be sure
         } catch (error) {
           console.error('Update lead error:', error);
           throw error;
