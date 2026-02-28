@@ -158,7 +158,11 @@ export default function AdminInfluencersPage() {
 
         <div className="grid grid-cols-1 gap-6">
           {activeInfluencers.length > 0 ? (
-            activeInfluencers.map((influencer) => (
+            activeInfluencers.map((influencer) => {
+              const fullInfluencer = influencers.find(i => i.id === influencer.id);
+              const historySourceCodes = fullInfluencer?.sourceCodes ?? [];
+
+              return (
               <Card key={influencer.id} className="shadow-lg border-0">
                 <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
                   <div className="flex items-center justify-between">
@@ -261,12 +265,8 @@ export default function AdminInfluencersPage() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {influencers
-                              .find(i => i.id === influencer.id)
-                              ?.sourceCodes.length ? (
-                                influencers
-                                .find(i => i.id === influencer.id)
-                                ?.sourceCodes.map((sc: any) => (
+                            {historySourceCodes.length ? (
+                                historySourceCodes.map((sc: any) => (
                                   <TableRow key={sc.id}>
                                     <TableCell className="font-medium">{sc.code}</TableCell>
                                     <TableCell>
@@ -296,7 +296,7 @@ export default function AdminInfluencersPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))
+            )})
           ) : (
              <div className="text-center py-12 bg-white rounded-lg shadow border border-dashed">
                 <h3 className="text-lg font-medium text-slate-900">No influencers found</h3>
