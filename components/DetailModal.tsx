@@ -82,8 +82,8 @@ function InfluencerDetails({ influencer }: { influencer: Influencer }) {
           Source Codes
         </h3>
         <div className="grid gap-3">
-          {influencer.sourceCodes?.length > 0 ? (
-            influencer.sourceCodes.map((sc) => (
+          {(influencer.sourceCodes ?? []).length > 0 ? (
+            (influencer.sourceCodes ?? []).map((sc) => (
               <div key={sc.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow bg-white">
                 <div className="flex items-center gap-3">
                   <code className="px-3 py-1 bg-slate-100 rounded-md font-mono text-sm font-semibold">

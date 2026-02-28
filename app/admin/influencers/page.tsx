@@ -241,8 +241,8 @@ export default function AdminInfluencersPage() {
                     <div>
                       <h3 className="text-sm font-medium mb-3 text-muted-foreground uppercase tracking-wide">Active Source Codes</h3>
                       <div className="flex flex-wrap gap-2">
-                        {influencer.sourceCodes.length > 0 ? (
-                          influencer.sourceCodes.map((sc) => (
+                        {(influencer.sourceCodes ?? []).length > 0 ? (
+                          (influencer.sourceCodes ?? []).map((sc) => (
                             <Badge key={sc.id} variant="success" className="px-3 py-1 text-sm">
                               {sc.code}
                             </Badge>

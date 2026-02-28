@@ -10,7 +10,7 @@ export interface User {
 export interface Influencer {
   id: string;
   name: string;
-  sourceCodes?: SourceCode[];
+  sourceCodes: SourceCode[];
 }
 
 export interface SourceCode {

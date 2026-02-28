@@ -40,7 +40,7 @@ export const fakeApi = {
     if (!influencer) throw new Error('Influencer not found');
 
     // Deactivate existing active source codes
-    influencer.sourceCodes.forEach(sc => {
+    (influencer.sourceCodes ?? []).forEach(sc => {
       if (sc.status === 'ACTIVE') {
         sc.status = 'INACTIVE';
         sc.updatedAt = new Date().toISOString();
@@ -55,7 +55,7 @@ export const fakeApi = {
       updatedAt: new Date().toISOString(),
     };
 
-    influencer.sourceCodes.push(newSourceCode);
+    (influencer.sourceCodes ?? []).push(newSourceCode);
     return newSourceCode;
   },
 

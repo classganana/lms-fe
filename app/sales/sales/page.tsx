@@ -462,7 +462,9 @@ export default function SalesPage() {
                                 </SelectTrigger>
                                 <SelectContent className="bg-white">
                                   <SelectItem value="all">All Codes</SelectItem>
-                                  {influencers.find(inf => inf.id === influencerFilter)?.sourceCodes.map((sc: any) => (
+                                  {(
+                                    influencers.find(inf => inf.id === influencerFilter)?.sourceCodes ?? []
+                                  ).map((sc: any) => (
                                     <SelectItem key={sc.code} value={sc.code}>{sc.code}</SelectItem>
                                   ))}
                                 </SelectContent>

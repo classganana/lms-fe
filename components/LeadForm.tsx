@@ -238,7 +238,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
 
   const activeInfluencers = influencers.map(inf => ({
     ...inf,
-    sourceCodes: inf.sourceCodes.filter(sc => sc.status === 'ACTIVE'),
+    sourceCodes: (inf.sourceCodes ?? []).filter(sc => sc.status === 'ACTIVE'),
   }));
 
   const onSubmit = async (data: LeadFormData) => {
@@ -246,7 +246,10 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       let savedLead: Lead;
       
       const selectedInfluencer = influencers.find(i => String(i.id) === String(data.influencerId));
-      const activeSourceCode = selectedInfluencer?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || data.sourceCode || '';
+      const activeSourceCode =
+        (selectedInfluencer?.sourceCodes ?? []).find(sc => sc.status === 'ACTIVE')?.code ||
+        data.sourceCode ||
+        '';
 
       const payload: any = {
         name: data.name || '',
@@ -503,7 +506,14 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-medium">Source Code</label>
           <Input 
-            value={watch('sourceCode') || activeInfluencers.find(i => String(i.id) === String(watch('influencerId')))?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || ''}
+            value={
+              watch('sourceCode') ||
+              (activeInfluencers
+                .find(i => String(i.id) === String(watch('influencerId')))
+                ?.sourceCodes ?? []
+              ).find(sc => sc.status === 'ACTIVE')?.code ||
+              ''
+            }
             readOnly
             className="h-11 border-2 transition-colors hover:border-primary/50 bg-muted"
           />

@@ -36,13 +36,20 @@ interface Store {
   openListModal: (leads: Lead[], title: string) => void;
   closeListModal: () => void;
 
+  // Detail modal state
+  selectedItem: Lead | Sale | Interaction | Influencer | null;
+  selectedItemType: 'lead' | 'sale' | 'interaction' | 'influencer' | null;
+  isModalOpen: boolean;
+  openModal: (item: Lead | Sale | Interaction | Influencer, type: 'lead' | 'sale' | 'interaction' | 'influencer') => void;
+  closeModal: (open?: boolean) => void;
+
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<Lead>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
   deleteLead: (id: string) => Promise<void>;
 
   addSale: (sale: Omit<Sale, 'id' | 'createdAt'>) => Promise<void>;
 
-  addInfluencer: (influencer: Omit<Influencer, 'id'>) => Promise<void>;
+  addInfluencer: (influencer: Omit<Influencer, 'id' | 'sourceCodes'>) => Promise<void>;
   updateInfluencer: (id: string, updates: Partial<Influencer>) => Promise<void>;
   deleteInfluencer: (id: string) => Promise<void>;
   addSourceCode: (influencerId: string, code: string) => Promise<void>;
@@ -79,6 +86,17 @@ export const useStore = create<Store>()(
       modalTitle: '',
       openListModal: (leads, title) => set({ isListModalOpen: true, modalLeads: leads, modalTitle: title }),
       closeListModal: () => set({ isListModalOpen: false, modalLeads: [], modalTitle: '' }),
+
+      // Detail modal state
+      selectedItem: null,
+      selectedItemType: null,
+      isModalOpen: false,
+      openModal: (item, type) => set({ selectedItem: item, selectedItemType: type, isModalOpen: true }),
+      closeModal: (open) => {
+        if (open === false || open === undefined) {
+          set({ isModalOpen: false, selectedItem: null, selectedItemType: null });
+        }
+      },
 
       loadInfluencers: async () => {
         try {
