@@ -11,13 +11,15 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Lead } from '@/types';
-
 import { useStore } from '@/store';
 import { format } from 'date-fns';
-import { User, Phone, MapPin, Star, Calendar, CheckCircle, Clock, Pencil, Trash2, Search, X } from 'lucide-react';
+import { User, Phone, MapPin, Star, Calendar as LucideCalendar, CheckCircle, Clock, Pencil, Trash2, Search, X, Filter, CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { LeadForm } from '@/components/LeadForm';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog,
   DialogContent,
@@ -29,19 +31,35 @@ import {
 
 
 function LeadsContent() {
-  const { leads, dateRange, deleteLead, loadLeads } = useStore();
+  const { leads, dateRange, deleteLead, loadLeads, influencers, loadInfluencers, users, loadUsers } = useStore();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    loadLeads();
+    loadInfluencers();
+    loadUsers();
+  }, [loadLeads, loadInfluencers, loadUsers]);
   
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   const [nameFilter, setNameFilter] = useState<string>('');
   const [mobileFilter, setMobileFilter] = useState<string>('');
   const [showTodayFollowUp, setShowTodayFollowUp] = useState(false);
+  
+  const [influencerFilter, setInfluencerFilter] = useState('all');
+  const [gstFilter, setGstFilter] = useState('all');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [sourceCodeFilter, setSourceCodeFilter] = useState('all');
+  const [followUpDateFilter, setFollowUpDateFilter] = useState<Date | undefined>(undefined);
+  const [salesPersonFilter, setSalesPersonFilter] = useState('all');
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [viewingLead, setViewingLead] = useState<Lead | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
 
   // Initialize filters from URL params
   useEffect(() => {
@@ -57,15 +75,23 @@ function LeadsContent() {
   const filteredLeads = useMemo(() => {
     let filtered = [...leads];
 
-    // Search filters
-    if (nameFilter) {
-      filtered = filtered.filter(l => l.name.toLowerCase().includes(nameFilter.toLowerCase()));
-    }
-    if (mobileFilter) {
-      filtered = filtered.filter(l => l.mobile.includes(mobileFilter));
+    // Priority 1: Today's Follow-up Mode (Apply as a filter, not an exit)
+    if (showTodayFollowUp) {
+      const todayStr = new Date().toDateString();
+      filtered = filtered.filter(l => {
+        if (!l.followUpDate) return false;
+        // Compare by local date string to ignore time components
+        return new Date(l.followUpDate).toDateString() === todayStr;
+      });
     }
 
-    // Date filter
+    // 1. Search filters (Combined name and mobile search)
+    if (nameFilter) {
+      const q = nameFilter.toLowerCase();
+      filtered = filtered.filter(l => l.name.toLowerCase().includes(q) || l.mobile.includes(q));
+    }
+
+    // 2. Creation Date range filter (createdAt)
     if (dateRange.from || dateRange.to) {
       filtered = filtered.filter(l => {
         const createdDate = new Date(l.createdAt);
@@ -92,34 +118,59 @@ function LeadsContent() {
       });
     }
 
-    // Status filter
+    // 3. Status filter
     if (statusFilter === 'converted') {
       filtered = filtered.filter(l => l.converted);
     } else if (statusFilter === 'pending') {
       filtered = filtered.filter(l => !l.converted);
     }
 
-    // Rating filter
+    // 4. Rating filter
     if (ratingFilter === 'interested') {
       filtered = filtered.filter(l => l.rating !== null && l.rating >= 3);
     } else if (ratingFilter === 'not-interested') {
       filtered = filtered.filter(l => l.rating !== null && l.rating <= 2);
+    } else if (ratingFilter !== 'all') {
+      filtered = filtered.filter(l => l.rating === Number(ratingFilter));
     }
 
-    // Today's Follow-up filter
-    if (showTodayFollowUp) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    // 5. Advanced Funnel Filters
+    if (influencerFilter !== 'all') {
+      filtered = filtered.filter(l => l.influencerId === influencerFilter);
+    }
+
+    if (gstFilter !== 'all') {
+      const isGst = gstFilter === 'yes';
+      filtered = filtered.filter(l => l.gstCustomer === isGst);
+    }
+
+    if (sourceCodeFilter !== 'all') {
+      filtered = filtered.filter(l => l.sourceCode === sourceCodeFilter);
+    }
+
+    if (followUpDateFilter) {
+      const targetDate = format(followUpDateFilter, 'yyyy-MM-dd');
       filtered = filtered.filter(l => {
         if (!l.followUpDate) return false;
-        const fDate = new Date(l.followUpDate);
-        fDate.setHours(0, 0, 0, 0);
-        return fDate.getTime() === today.getTime();
+        return format(new Date(l.followUpDate), 'yyyy-MM-dd') === targetDate;
+      });
+    }
+
+    if (salesPersonFilter !== 'all') {
+      filtered = filtered.filter(l => l.createdBy === salesPersonFilter);
+    }
+
+    if (minAmount || maxAmount) {
+      filtered = filtered.filter(l => {
+        const amount = Number(l.salesAmount || 0);
+        if (minAmount && amount < Number(minAmount)) return false;
+        if (maxAmount && amount > Number(maxAmount)) return false;
+        return true;
       });
     }
 
     return filtered;
-  }, [leads, dateRange, statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp]);
+  }, [leads, dateRange, statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp, influencerFilter, gstFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, salesPersonFilter]);
 
   const handleEditClick = (lead: Lead) => {
     setEditingLead(lead);
@@ -129,6 +180,11 @@ function LeadsContent() {
   const handleDeleteClick = (id: string) => {
     setDeleteId(id);
     setIsDeleteDialogOpen(true);
+  };
+
+  const handleRowClick = (lead: Lead) => {
+    setViewingLead(lead);
+    setIsViewDialogOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -177,74 +233,186 @@ function LeadsContent() {
             </div>
           </CardHeader>
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name..."
-                  value={nameFilter}
-                  onChange={(e) => setNameFilter(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by mobile..."
-                  value={mobileFilter}
-                  onChange={(e) => setMobileFilter(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by Status" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="converted">Converted</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <div className="flex gap-2">
-                <Select value={ratingFilter} onValueChange={setRatingFilter}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Filter by Interest" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="all">All Ratings</SelectItem>
-                    <SelectItem value="interested">Interested (3+)</SelectItem>
-                    <SelectItem value="not-interested">Not Interested (&lt;3)</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {(nameFilter || mobileFilter || statusFilter !== 'all' || ratingFilter !== 'all' || showTodayFollowUp) && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => {
-                      setNameFilter('');
-                      setMobileFilter('');
-                      setStatusFilter('all');
-                      setRatingFilter('all');
-                      setShowTodayFollowUp(false);
-                    }}
-                    className="shrink-0 hover:bg-slate-100 text-rose-500"
-                    title="Clear all filters"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+            <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[300px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input 
+                placeholder="Search leads with phone and name..." 
+                className="pl-10 h-11 bg-white border-slate-200"
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+              />
             </div>
 
-            {showTodayFollowUp && (
-              <div className="mb-6 flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="h-11 gap-2 border-dashed border-slate-300 px-6 font-bold text-slate-700 bg-white">
+                  <Filter className="h-4 w-4" />
+                  Leads Funnel
+                  {(statusFilter !== 'all' || ratingFilter !== 'all' || influencerFilter !== 'all' || gstFilter !== 'all' || minAmount || maxAmount || sourceCodeFilter !== 'all' || followUpDateFilter || salesPersonFilter !== 'all') && (
+                    <Badge variant="secondary" className="ml-1 px-1 h-5 min-w-[1.25rem] bg-blue-100 text-blue-700">
+                      !
+                    </Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[95vw] md:w-[800px] p-8 bg-white shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[60vh] scrollbar-hide" align="end">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between border-b pb-4">
+                    <h4 className="font-black text-slate-900 uppercase tracking-tight text-base">Leads Search Engine</h4>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 px-4 text-xs font-bold text-blue-600 hover:bg-blue-50"
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setRatingFilter('all');
+                        setInfluencerFilter('all');
+                        setGstFilter('all');
+                        setMinAmount('');
+                        setMaxAmount('');
+                        setSourceCodeFilter('all');
+                        setFollowUpDateFilter(undefined);
+                        setSalesPersonFilter('all');
+                        setNameFilter('');
+                        setMobileFilter('');
+                      }}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Workflow Status</Label>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="h-10 bg-slate-50">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white">
+                          <SelectItem value="all">Any Status</SelectItem>
+                          <SelectItem value="converted">Converted Only</SelectItem>
+                          <SelectItem value="pending">Pending Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Engagement Score</Label>
+                      <Select value={ratingFilter} onValueChange={setRatingFilter}>
+                        <SelectTrigger className="h-10 bg-slate-50">
+                          <SelectValue placeholder="Rating" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white">
+                          <SelectItem value="all">Any Rating</SelectItem>
+                          <SelectItem value="interested">High Interest (3+ ★)</SelectItem>
+                          <SelectItem value="not-interested">Low Interest (1-2 ★)</SelectItem>
+                          {[5,4,3,2,1].map(r => (
+                            <SelectItem key={r} value={String(r)}>{r} Star Ranking</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Origin Channel (Influencer)</Label>
+                      <Select value={influencerFilter} onValueChange={setInfluencerFilter}>
+                        <SelectTrigger className="h-10 bg-slate-50">
+                          <SelectValue placeholder="Select Channel" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white">
+                          <SelectItem value="all">All Channels</SelectItem>
+                          {influencers.map(inf => (
+                            <SelectItem key={inf.id} value={inf.id}>{inf.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GST Intelligence</Label>
+                    <Select value={gstFilter} onValueChange={setGstFilter}>
+                      <SelectTrigger className="h-10 bg-slate-50">
+                        <SelectValue placeholder="GST Mode" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        <SelectItem value="all">Any Status</SelectItem>
+                        <SelectItem value="yes">GST Verified</SelectItem>
+                        <SelectItem value="no">Non-GST</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                    <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Planned Interaction Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-slate-50", !followUpDateFilter && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4 text-blue-600" />
+                          {followUpDateFilter ? format(followUpDateFilter, 'PPPP') : 'Target a date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 bg-white" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={followUpDateFilter}
+                          onSelect={setFollowUpDateFilter}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                    <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Min)</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="Min ₹" 
+                      className="h-10 bg-slate-50"
+                      value={minAmount}
+                      onChange={(e) => setMinAmount(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Max)</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="Max ₹" 
+                      className="h-10 bg-slate-50"
+                      value={maxAmount}
+                      onChange={(e) => setMaxAmount(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Assigned Strategist</Label>
+                    <Select value={salesPersonFilter} onValueChange={setSalesPersonFilter}>
+                      <SelectTrigger className="h-10 bg-slate-50">
+                        <SelectValue placeholder="Select Strategist" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        <SelectItem value="all">Global Strategists</SelectItem>
+                        {users.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <div className="w-[200px]">
+              <DateRangePicker />
+            </div>
+          </div>
+          
+          {showTodayFollowUp && (
+              <div className="mb-6 flex items-center gap-2 animate-in fade-in slide-in-from-top-1 px-6 pt-2">
                 <Badge className="bg-blue-600 text-white hover:bg-blue-700 px-3 py-1 flex items-center gap-2">
-                  <Calendar className="h-3 w-3" />
+                  <LucideCalendar className="h-3 w-3" />
                   Viewing: Today&apos;s Follow-ups
                   <X 
                     className="h-3 w-3 cursor-pointer ml-1 hover:text-red-200" 
@@ -267,6 +435,7 @@ function LeadsContent() {
                     <TableHead className="font-bold text-xs uppercase tracking-wider">Rating</TableHead>
                     <TableHead className="font-bold text-xs uppercase tracking-wider">GST</TableHead>
                     <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
+                    <TableHead className="font-bold text-xs uppercase tracking-wider">Follow-up</TableHead>
                     <TableHead className="font-bold text-xs uppercase tracking-wider">Created</TableHead>
                     <TableHead className="font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
                   </TableRow>
@@ -276,7 +445,8 @@ function LeadsContent() {
                     filteredLeads.map((lead) => (
                       <TableRow 
                         key={lead.id} 
-                        className="hover:bg-muted/30 transition-colors group border-b h-14"
+                        className="hover:bg-muted/30 transition-colors group border-b h-14 cursor-pointer"
+                        onClick={() => handleRowClick(lead)}
                       >
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -328,8 +498,14 @@ function LeadsContent() {
                           )}
                         </TableCell>
                         <TableCell>
+                          <div className="flex items-center gap-2 text-blue-600/80 text-xs font-semibold">
+                            <LucideCalendar className="h-3.5 w-3.5" />
+                            {lead.followUpDate ? format(new Date(lead.followUpDate), 'MMM dd, yyyy') : '--'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                            <Calendar className="h-3.5 w-3.5" />
+                            <LucideCalendar className="h-3.5 w-3.5" />
                             {format(new Date(lead.createdAt), 'MMM dd, yyyy')}
                           </div>
                         </TableCell>
@@ -339,7 +515,10 @@ function LeadsContent() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-blue-600 hover:bg-blue-50"
-                              onClick={() => handleEditClick(lead)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(lead);
+                              }}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -347,7 +526,10 @@ function LeadsContent() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-rose-600 hover:bg-rose-50"
-                              onClick={() => handleDeleteClick(lead.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClick(lead.id);
+                              }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -357,7 +539,7 @@ function LeadsContent() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-16">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-16">
                         <div className="flex flex-col items-center gap-2">
                           <Search className="h-8 w-8 text-slate-300" />
                           <p>No leads found matching your filters</p>
@@ -368,7 +550,7 @@ function LeadsContent() {
                 </TableBody>
                 <TableFooter className="bg-muted/10 border-t">
                   <TableRow>
-                    <TableCell colSpan={7} className="text-right text-xs font-medium text-muted-foreground px-6 py-3">
+                    <TableCell colSpan={9} className="text-right text-xs font-medium text-muted-foreground px-6 py-3">
                       Records Found: {filteredLeads.length}
                     </TableCell>
                   </TableRow>
@@ -415,6 +597,129 @@ function LeadsContent() {
               </Button>
               <Button variant="destructive" onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700">
                 Delete Permanently
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Lead Details Dialog */}
+        <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+          <DialogContent className="max-w-2xl bg-white rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
+            <DialogHeader className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                  <User className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-2xl font-black tracking-tight">{viewingLead?.name}</DialogTitle>
+                  <DialogDescription className="text-blue-100 font-medium">Lead Identity: AUD-#{viewingLead?.id?.slice(-8).toUpperCase() || 'N/A'}</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto no-scrollbar">
+              {/* Core Information */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mobile Number</p>
+                  <p className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-blue-600" />
+                    {viewingLead?.mobile}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
+                  <p className="text-base font-bold text-slate-900">{viewingLead?.email || 'N/A'}</p>
+                </div>
+              </div>
+
+              {/* Location Data */}
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">State / Region</p>
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-slate-400" />
+                    {viewingLead?.state}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City / Locale</p>
+                  <p className="text-sm font-bold text-slate-700">{viewingLead?.city || 'N/A'}</p>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Postal Address</p>
+                  <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
+                    {viewingLead?.address || 'No address provided'}
+                    {viewingLead?.pincode ? ` - ${viewingLead.pincode}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Status & Rating */}
+              <div className="grid grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pipeline Status</p>
+                  {viewingLead?.converted ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 px-4 py-1.5 rounded-lg font-bold">
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      CONVERTED
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-slate-100 text-slate-600 border-slate-200 px-4 py-1.5 rounded-lg font-bold shadow-none">
+                      <Clock className="h-4 w-4 mr-2 text-slate-400" />
+                      PENDING AUDIT
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Engagement Score</p>
+                  <Badge className={cn("px-4 py-1.5 rounded-lg border-0 shadow-lg font-black", getRatingColor(viewingLead?.rating || null))}>
+                    <Star className="h-4 w-4 mr-2 fill-current" />
+                    {viewingLead?.rating ? `${viewingLead.rating}.0 / 5.0` : 'NOT SCORED'}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Workflow Anchors */}
+              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Interaction Plan</p>
+                  <p className="text-sm font-black text-blue-600 flex items-center gap-2">
+                    <LucideCalendar className="h-4 w-4" />
+                    {viewingLead?.followUpDate ? format(new Date(viewingLead.followUpDate), 'MMMM dd, yyyy') : 'No follow-up scheduled'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registration Stamp</p>
+                  <p className="text-sm font-bold text-slate-700">
+                    {viewingLead?.createdAt ? format(new Date(viewingLead.createdAt), 'MMM dd, yyyy') : 'N/A'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Notes Context */}
+              {viewingLead?.notes && (
+                <div className="space-y-3 pt-6 border-t border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Context & Audit Notes</p>
+                  <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-sm text-amber-900 font-medium leading-relaxed italic">
+                    "{viewingLead.notes}"
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="p-8 border-t bg-slate-50 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-bold text-slate-600 bg-white border-slate-200">
+                CLOSE JOURNAL
+              </Button>
+              <Button 
+                onClick={() => {
+                  setIsViewDialogOpen(false);
+                  handleEditClick(viewingLead!);
+                }} 
+                className="rounded-xl px-8 font-extrabold bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200/50"
+              >
+                MODIFY NODES
               </Button>
             </DialogFooter>
           </DialogContent>

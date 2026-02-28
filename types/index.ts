@@ -47,6 +47,13 @@ export interface Lead {
   createdBy?: string;
 }
 
+export interface DateRange {
+  from: Date | undefined;
+  to: Date | undefined;
+}
+
+export type Interaction = LeadInteraction;
+
 export interface LeadInteraction {
   id: string;
   leadId: string;

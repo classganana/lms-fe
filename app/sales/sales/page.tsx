@@ -12,7 +12,23 @@ import { useStore } from '@/store';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { RefreshCcw, Filter, X, Pencil, Trash2, CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  RefreshCcw, 
+  Filter, 
+  X, 
+  Pencil, 
+  Trash2, 
+  CalendarIcon, 
+  ChevronLeft, 
+  ChevronRight,
+  User as UserIcon,
+  Phone as PhoneIcon,
+  MapPin as MapPinIcon,
+  Star as StarIcon,
+  Clock as ClockIcon,
+  CheckCircle as CheckCircleIcon,
+  Calendar as LucideCalendar
+} from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -27,7 +43,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Lead } from '@/types';
+import { Lead, User } from '@/types';
 
 const states = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -39,11 +55,13 @@ const states = [
 ];
 
 export default function SalesPage() {
-  const { sales, leads, influencers, users, dateRange, loadSales, loadLeads, loadInfluencers, loadUsers, openModal, deleteLead, updateLead } = useStore();
+  const { sales, leads, influencers, users, dateRange, loadSales, loadLeads, loadInfluencers, loadUsers, deleteLead, updateLead } = useStore();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [viewingLead, setViewingLead] = useState<Lead | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
 
 
   const [influencerFilter, setInfluencerFilter] = useState<string>('all');
@@ -106,6 +124,18 @@ export default function SalesPage() {
   const handleEditClick = (lead: Lead) => {
     setEditingLead(lead);
     setIsEditDialogOpen(true);
+  };
+
+  const getRatingColor = (rating: number | null) => {
+    if (!rating) return 'bg-gray-100 text-gray-600';
+    if (rating >= 4) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    if (rating >= 3) return 'bg-amber-100 text-amber-700 border-amber-200';
+    return 'bg-rose-100 text-rose-700 border-rose-200';
+  };
+
+  const handleRowClick = (lead: Lead) => {
+    setViewingLead(lead);
+    setIsViewDialogOpen(true);
   };
 
 
@@ -589,6 +619,7 @@ export default function SalesPage() {
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Follow Up</TableHead>
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">GST</TableHead>
+                        <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</TableHead>
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -600,8 +631,10 @@ export default function SalesPage() {
                           return (
                             <TableRow 
                               key={sale.id} 
-                              className="h-10 hover:bg-transparent transition-colors cursor-pointer border-b"
-                              onClick={() => openModal(sale, 'sale')}
+                              className="h-10 hover:bg-slate-50 transition-colors cursor-pointer border-b"
+                              onClick={() => {
+                                if (lead) handleRowClick(lead);
+                              }}
                             >
                               <TableCell className="py-2 px-2 font-medium text-xs">{format(new Date(sale.saleDate), 'MMM dd, yyyy')}</TableCell>
                               <TableCell className="py-2 px-2 text-xs font-medium">{lead?.name || 'N/A'}</TableCell>
@@ -617,6 +650,11 @@ export default function SalesPage() {
                               <TableCell className="py-2 px-2">
                                 <Badge variant={sale.gst ? 'success' : 'secondary'} className="h-5 px-1.5 text-[10px]">
                                   {sale.gst ? 'Yes' : 'No'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="py-2 px-2 text-xs font-medium">
+                                <Badge className="h-5 px-1.5 text-[10px] bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+                                  Converted
                                 </Badge>
                               </TableCell>
                               <TableCell className="py-2 px-2">
@@ -644,7 +682,7 @@ export default function SalesPage() {
                         })
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
+                          <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                             <div className="flex flex-col items-center justify-center gap-2">
                               <p>No sales found matching your filters</p>
                               <Button 
@@ -683,7 +721,7 @@ export default function SalesPage() {
                         <TableCell className="font-bold text-emerald-600 text-lg px-2">
                           ₹{totals.revenue.toLocaleString()}
                         </TableCell>
-                        <TableCell colSpan={2} className="px-2">
+                        <TableCell colSpan={3} className="px-2">
                           <Badge variant="secondary" className="font-semibold">
                             {totals.gstCount}/{totals.count}
                           </Badge>
@@ -1022,6 +1060,129 @@ export default function SalesPage() {
               onCancel={() => setIsEditDialogOpen(false)}
               showCardWrapper={false} 
             />
+          </DialogContent>
+        </Dialog>
+
+        {/* View Lead Details Dialog */}
+        <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+          <DialogContent className="max-w-2xl bg-white rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
+            <DialogHeader className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                  <UserIcon className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-2xl font-black tracking-tight">{viewingLead?.name}</DialogTitle>
+                  <DialogDescription className="text-blue-100 font-medium">Lead Identity: AUD-#{viewingLead?.id?.slice(-8).toUpperCase() || 'N/A'}</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto no-scrollbar">
+              {/* Core Information */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mobile Number</p>
+                  <p className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <PhoneIcon className="h-4 w-4 text-blue-600" />
+                    {viewingLead?.mobile}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
+                  <p className="text-base font-bold text-slate-900">{viewingLead?.email || 'N/A'}</p>
+                </div>
+              </div>
+
+              {/* Location Data */}
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">State / Region</p>
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <MapPinIcon className="h-4 w-4 text-slate-400" />
+                    {viewingLead?.state}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City / Locale</p>
+                  <p className="text-sm font-bold text-slate-700">{viewingLead?.city || 'N/A'}</p>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Postal Address</p>
+                  <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
+                    {viewingLead?.address || 'No address provided'}
+                    {viewingLead?.pincode ? ` - ${viewingLead.pincode}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Status & Rating */}
+              <div className="grid grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pipeline Status</p>
+                  {viewingLead?.converted ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 px-4 py-1.5 rounded-lg font-bold">
+                      <CheckCircleIcon className="h-4 w-4 mr-2" />
+                      CONVERTED
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-slate-100 text-slate-600 border-slate-200 px-4 py-1.5 rounded-lg font-bold shadow-none">
+                      <ClockIcon className="h-4 w-4 mr-2 text-slate-400" />
+                      PENDING AUDIT
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Engagement Score</p>
+                  <Badge className={cn("px-4 py-1.5 rounded-lg border-0 shadow-lg font-black", getRatingColor(viewingLead?.rating || null))}>
+                    <StarIcon className="h-4 w-4 mr-2 fill-current" />
+                    {viewingLead?.rating ? `${viewingLead.rating}.0 / 5.0` : 'NOT SCORED'}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Workflow Anchors */}
+              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Interaction Plan</p>
+                  <p className="text-sm font-black text-blue-600 flex items-center gap-2">
+                    <CalendarIcon className="h-4 w-4" />
+                    {viewingLead?.followUpDate ? format(new Date(viewingLead.followUpDate), 'MMMM dd, yyyy') : 'No follow-up scheduled'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registration Stamp</p>
+                  <p className="text-sm font-bold text-slate-700">
+                    {viewingLead?.createdAt ? format(new Date(viewingLead.createdAt), 'MMM dd, yyyy') : 'N/A'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Notes Context */}
+              {viewingLead?.notes && (
+                <div className="space-y-3 pt-6 border-t border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Context & Audit Notes</p>
+                  <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-sm text-amber-900 font-medium leading-relaxed italic">
+                    "{viewingLead.notes}"
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="p-8 border-t bg-slate-50 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-bold text-slate-600 bg-white border-slate-200">
+                CLOSE JOURNAL
+              </Button>
+              <Button 
+                onClick={() => {
+                  setIsViewDialogOpen(false);
+                  handleEditClick(viewingLead!);
+                }} 
+                className="rounded-xl px-8 font-extrabold bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-200/50"
+              >
+                MODIFY NODES
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

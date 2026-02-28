@@ -31,7 +31,7 @@ const states = [
 const callStatuses = ['CONNECTED', 'NOT_CONNECTED', 'BUSY', 'WRONG_NUMBER'] as const;
 
 const leadSchema = z.object({
-  mobile: z.string().min(10, 'Mobile number must be 10 digits').max(10, 'Mobile number must be 10 digits'),
+  mobile: z.string().min(10, 'Mobile is too short').max(15, 'Mobile is too long'),
   name: z.string(),
   state: z.string(),
   city: z.string(),
@@ -39,6 +39,7 @@ const leadSchema = z.object({
   pincode: z.string(),
   email: z.string().email('Invalid email address').or(z.literal('')),
   influencerId: z.string(),
+  sourceCode: z.string().optional(),
   callStatus: z.enum(callStatuses),
   rating: z.number().min(1).max(5).nullable(),
   notes: z.string().optional(),
@@ -60,7 +61,7 @@ interface LeadFormProps {
 
 export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, showCardWrapper = true }: LeadFormProps) {
   const router = useRouter();
-  const { influencers, users, addLead, updateLead, loadLeads, loadUsers } = useStore();
+  const { influencers, users, addLead, updateLead, loadLeads, loadUsers, loadInfluencers } = useStore();
   const [originalLead, setOriginalLead] = useState<Lead | null>(null);
   const [discoveredLead, setDiscoveredLead] = useState<Lead | null>(null);
   const [showAlert, setShowAlert] = useState(false);
@@ -68,16 +69,20 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const [mobileReadOnly, setMobileReadOnly] = useState(false);
   const [influencerReadOnly, setInfluencerReadOnly] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     loadUsers();
-  }, [loadUsers]);
+    loadInfluencers();
+    loadLeads();
+  }, [loadUsers, loadInfluencers, loadLeads]);
 
 
   const {
     register,
     handleSubmit,
     setValue,
+    reset,
     watch,
     formState: { errors },
   } = useForm<LeadFormData>({
@@ -91,6 +96,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       pincode: '',
       email: '',
       influencerId: '',
+      sourceCode: '',
       callStatus: 'CONNECTED',
       rating: null,
       notes: '',
@@ -107,114 +113,127 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const rating = watch('rating');
   const gstCustomer = watch('gstCustomer');
 
-  // Check for existing lead
+  // Check for existing lead and populate form
   useEffect(() => {
-    const checkLead = async () => {
-      const isTrue = (val: any) => val === true || val === 'true' || val === 1 || val === '1';
+    const isTrue = (val: any) => val === true || val === 'true' || val === 1 || val === '1';
 
-      // 1. Initial load for Edit Mode
-      if (isInitialLoad && (initialMobile || initialData)) {
-        let found = initialData;
+    const populateForm = async () => {
+      // Prevent redundant runs that overwrite fetched state with stale parent props
+      if (!isInitialLoad) return;
 
-        if (!found && initialMobile) {
-          await loadLeads();
-          const { leads } = useStore.getState();
-          found = leads.find((l) => l.mobile === initialMobile);
-        }
+      let leadToUse = initialData;
 
-        if (found) {
-          setOriginalLead(found);
-          const backendAmount = Number((found as any).salesAmount || (found as any).amount || 0);
-          const isConverted = isTrue(found.converted) || backendAmount > 0;
-
-          // Type-safe way to iterate and set values
-          const leadKeys = Object.keys(found) as Array<keyof Lead | 'amount' | 'gst'>;
-          leadKeys.forEach((key) => {
-            const value = (found as any)[key];
-            if (key === 'followUpDate' && value) {
-              setValue('followUpDate', new Date(value as string));
-            } else if (key in leadSchema.shape) {
-              if (key === 'converted') {
-                setValue('converted', isConverted);
-              } else if (key === 'gstCustomer') {
-                setValue('gstCustomer', isTrue(value));
-              } else {
-                setValue(key as any, value);
-              }
+      // 1. Fetch fresh FULL data from API if we are editing (have ID)
+      if (initialData?.id) {
+        setIsLoading(true);
+        try {
+          const { token } = useStore.getState();
+          const response = await fetch(`http://18.61.48.70:3000/sales/leads/${initialData.id}`, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : ''
             }
           });
-
-          setValue('converted', isConverted);
-          if (backendAmount > 0) {
-            setValue('salesAmount', backendAmount);
+          if (response.ok) {
+            const freshData = await response.json();
+            console.log('📡 Fetched Full Lead Details:', freshData);
+            leadToUse = {
+              ...freshData,
+              id: String(freshData.id || freshData._id)
+            };
           }
-
-          if ((found as any).gstStatus !== undefined) {
-            setValue('gstCustomer', (found as any).gstStatus === 'YES');
-          } else if ((found as any).gst !== undefined) {
-            setValue('gstCustomer', isTrue((found as any).gst));
-          }
-
-          if (found.influencerId) setInfluencerReadOnly(true);
+        } catch (error) {
+          console.error('Error fetching lead details:', error);
+        } finally {
+          setIsLoading(false);
         }
-        setIsInitialLoad(false);
-        return;
       }
 
-      // 2. Add Mode or changing number in Edit Mode
-      if (mobile && mobile.length === 10) {
-        if (originalLead && mobile === originalLead.mobile) {
-          setDiscoveredLead(null);
-          setShowAlert(false);
-          return;
+      if (leadToUse) {
+        setOriginalLead(leadToUse);
+        
+        const backendAmount = Number(leadToUse.salesAmount || (leadToUse as any).amount || 0);
+        const isConverted = isTrue(leadToUse.converted) || backendAmount > 0;
+        const isGst = leadToUse.gstStatus === 'YES' || isTrue(leadToUse.gstStatus) || isTrue(leadToUse.gst) || isTrue(leadToUse.gstCustomer);
+
+        // Robust date parsing
+        let fDate: Date | null = null;
+        if (leadToUse.followUpDate) {
+          const parsed = new Date(leadToUse.followUpDate);
+          if (!isNaN(parsed.getTime())) fDate = parsed;
         }
 
+        reset({
+          mobile: String(leadToUse.mobile || ''),
+          name: String(leadToUse.name || ''),
+          state: String(leadToUse.state || ''),
+          city: String(leadToUse.city || ''),
+          address: String(leadToUse.address || ''),
+          pincode: String(leadToUse.pincode || ''),
+          email: String(leadToUse.email || ''),
+          influencerId: String(leadToUse.influencerId || ''),
+          sourceCode: String(leadToUse.sourceCode || ''),
+          callStatus: leadToUse.callStatus || 'CONNECTED',
+          rating: leadToUse.rating ?? null,
+          notes: String(leadToUse.notes || ''),
+          followUpDate: fDate,
+          converted: isConverted,
+          salesAmount: backendAmount || null,
+          gstCustomer: isGst,
+        });
+
+        if (leadToUse.influencerId) setInfluencerReadOnly(true);
+      } else if (mobile && mobile.replace(/[^0-9]/g, '').length >= 10 && !initialData) {
         const { leads } = useStore.getState();
-        const found = leads.find((l) => l.mobile === mobile);
+        const cleanSearchMobile = mobile.slice(-10);
+        const found = leads.find((l) => l.mobile.includes(cleanSearchMobile));
+        
         if (found) {
           setDiscoveredLead(found);
           setShowAlert(true);
-          if (!originalLead) {
-            const backendAmount = Number((found as any).salesAmount || (found as any).amount || 0);
-            const isConverted = isTrue(found.converted) || backendAmount > 0;
+          
+          const backendAmount = Number(found.salesAmount || (found as any).amount || 0);
+          const isConverted = isTrue(found.converted) || backendAmount > 0;
+          const isGst = found.gstStatus === 'YES' || isTrue(found.gstStatus) || isTrue(found.gst) || isTrue(found.gstCustomer);
 
-            const leadKeys = Object.keys(found) as Array<keyof Lead | 'amount' | 'gst'>;
-            leadKeys.forEach((key) => {
-              const value = (found as any)[key];
-              if (key === 'followUpDate' && value) {
-                setValue('followUpDate', new Date(value as string));
-              } else if (key in leadSchema.shape) {
-                if (key === 'converted') {
-                  setValue('converted', isConverted);
-                } else if (key === 'gstCustomer') {
-                  setValue('gstCustomer', isTrue(value));
-                } else {
-                  setValue(key as any, value);
-                }
-              }
-            });
-
-            setValue('converted', isConverted);
-            if (backendAmount > 0) {
-              setValue('salesAmount', backendAmount);
-            }
-            if ((found as any).gst !== undefined) {
-              setValue('gstCustomer', isTrue((found as any).gst));
-            }
-            setInfluencerReadOnly(true);
+          let fDate: Date | null = null;
+          if (found.followUpDate) {
+            const parsed = new Date(found.followUpDate);
+            if (!isNaN(parsed.getTime())) fDate = parsed;
           }
+
+          reset({
+            mobile: found.mobile || '',
+            name: found.name || '',
+            state: found.state || '',
+            city: found.city || '',
+            address: found.address || '',
+            pincode: found.pincode || '',
+            email: found.email || '',
+            influencerId: found.influencerId || '',
+            sourceCode: found.sourceCode || '',
+            callStatus: found.callStatus || 'CONNECTED',
+            rating: found.rating ?? null,
+            notes: found.notes || '',
+            followUpDate: fDate,
+            converted: isConverted,
+            salesAmount: backendAmount || null,
+            gstCustomer: isGst,
+          });
+
+          setInfluencerReadOnly(true);
         } else {
           setDiscoveredLead(null);
           setShowAlert(false);
-          if (!originalLead) {
-            setInfluencerReadOnly(false);
-          }
+          setInfluencerReadOnly(false);
         }
       }
+      
+      // Mark as initialized so re-renders don't wipe the form
+      setIsInitialLoad(false);
     };
 
-    checkLead();
-  }, [mobile, initialMobile, initialData, setValue, loadLeads, isInitialLoad, originalLead]);
+    populateForm();
+  }, [initialData, mobile, reset, isInitialLoad]);
 
 
   const activeInfluencers = influencers.map(inf => ({
@@ -226,8 +245,8 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     try {
       let savedLead: Lead;
       
-      const selectedInfluencer = influencers.find(i => i.id === data.influencerId);
-      const activeSourceCode = selectedInfluencer?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || '';
+      const selectedInfluencer = influencers.find(i => String(i.id) === String(data.influencerId));
+      const activeSourceCode = selectedInfluencer?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || data.sourceCode || '';
 
       const payload: any = {
         name: data.name || '',
@@ -238,23 +257,18 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         pincode: data.pincode || '',
         email: data.email || '',
         influencerId: data.influencerId,
+        sourceCode: activeSourceCode,
         callStatus: data.callStatus,
         rating: Number(data.rating) || 0,
         notes: data.notes || '',
         converted: data.converted,
         amount: Number(data.salesAmount) || 0,
-        gst: Boolean(data.gstCustomer),
-        gstStatus: data.gstCustomer ? 'YES' : 'NO', // Send as 'YES'/'NO' strings
-        // Mapping back to what frontend expects in the store to avoid UI flickering
         salesAmount: Number(data.salesAmount) || 0,
-        gstCustomer: Boolean(data.gstCustomer)
+        gstStatus: data.gstCustomer ? 'YES' : 'NO',
+        gst: Boolean(data.gstCustomer),
+        gstCustomer: Boolean(data.gstCustomer),
+        followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
       };
-
-      if (data.followUpDate) {
-        payload.followUpDate = data.followUpDate.toISOString();
-      } else {
-        payload.followUpDate = null;
-      }
 
       console.log('🚀 Preparing to save lead. ID:', originalLead?.id || 'NEW');
       console.log('📦 Content:', payload);
@@ -489,7 +503,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-medium">Source Code</label>
           <Input 
-            value={activeInfluencers.find(i => i.id === watch('influencerId'))?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || ''}
+            value={watch('sourceCode') || activeInfluencers.find(i => String(i.id) === String(watch('influencerId')))?.sourceCodes.find(sc => sc.status === 'ACTIVE')?.code || ''}
             readOnly
             className="h-11 border-2 transition-colors hover:border-primary/50 bg-muted"
           />
@@ -690,6 +704,15 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     return (
       <div className="space-y-6">
         {formContent}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+        <p className="text-muted-foreground font-medium">Fetching latest lead details...</p>
       </div>
     );
   }

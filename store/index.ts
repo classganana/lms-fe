@@ -1,15 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User, Influencer, Lead, LeadInteraction, Sale, Role } from '@/types';
+import { Lead, Sale, Interaction, Influencer, DateRange, User, Role } from '@/types';
 import { fakeApi } from '@/services/fakeApi';
 
-interface DateRange {
-  from: Date | undefined;
-  to: Date | undefined;
-}
-
 interface Store {
-  // Auth
   user: User | null;
   role: Role | null;
   token: string | null;
@@ -18,157 +12,115 @@ interface Store {
   setToken: (token: string | null) => void;
   logout: () => void;
 
-  // Date filter
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
+
+  leads: Lead[];
+  sales: Sale[];
+  interactions: Interaction[];
+  influencers: Influencer[];
+  users: User[];
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
 
-  // Data
-  influencers: Influencer[];
-  leads: Lead[];
-  interactions: LeadInteraction[];
-  sales: Sale[];
-  users: User[];
-
-  // Modal state
-  selectedItem: Influencer | Lead | LeadInteraction | Sale | null;
-  selectedItemType: 'influencer' | 'lead' | 'interaction' | 'sale' | null;
-  selectedItems: (Influencer | Lead | LeadInteraction | Sale)[] | null;
-  selectedItemsType: 'influencers' | 'leads' | 'interactions' | 'sales' | null;
-  isModalOpen: boolean;
-  openModal: (item: Influencer | Lead | LeadInteraction | Sale, type: 'influencer' | 'lead' | 'interaction' | 'sale') => void;
-  openListModal: (items: (Influencer | Lead | LeadInteraction | Sale)[], type: 'influencers' | 'leads' | 'interactions' | 'sales') => void;
-  closeModal: () => void;
-
-  // Actions
-  loadInfluencers: () => Promise<void>;
   loadLeads: () => Promise<void>;
-  loadInteractions: () => Promise<void>;
   loadSales: () => Promise<void>;
+  loadInteractions: () => Promise<void>;
+  loadInfluencers: () => Promise<void>;
   loadUsers: () => Promise<void>;
-  addLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Lead>;
+
+  // UI state for modals
+  isListModalOpen: boolean;
+  modalLeads: Lead[];
+  modalTitle: string;
+  openListModal: (leads: Lead[], title: string) => void;
+  closeListModal: () => void;
+
+  addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<Lead>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
   deleteLead: (id: string) => Promise<void>;
+
   addSale: (sale: Omit<Sale, 'id' | 'createdAt'>) => Promise<void>;
-  addSourceCode: (influencerId: string, code: string) => Promise<void>;
-  addInfluencer: (influencer: Omit<Influencer, 'id' | 'sourceCodes'>) => Promise<void>;
-  deleteInfluencer: (id: string) => Promise<void>;
+
+  addInfluencer: (influencer: Omit<Influencer, 'id'>) => Promise<void>;
   updateInfluencer: (id: string, updates: Partial<Influencer>) => Promise<void>;
-  // Hydration state
-  _hasHydrated: boolean;
-  setHasHydrated: (state: boolean) => void;
+  deleteInfluencer: (id: string) => Promise<void>;
+  addSourceCode: (influencerId: string, code: string) => Promise<void>;
 }
 
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
-      // Auth
       user: null,
       role: null,
       token: null,
       setUser: (user) => set({ user }),
       setRole: (role) => set({ role }),
       setToken: (token) => set({ token }),
-      logout: () => {
-        set({ user: null, role: null, token: null });
-        localStorage.removeItem('lms-store');
-      },
+      logout: () => set({ user: null, role: null, token: null }),
 
-      // Hydration state
       _hasHydrated: false,
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
-      // Date filter
-      dateRange: { from: undefined, to: undefined },
-      setDateRange: (range) => set({ dateRange: range }),
-
-      // Data
-      influencers: [],
       leads: [],
-      interactions: [],
       sales: [],
+      interactions: [],
+      influencers: [],
       users: [],
+      dateRange: {
+        from: undefined,
+        to: undefined,
+      },
+      setDateRange: (dateRange) => set({ dateRange }),
 
       // Modal state
-      selectedItem: null,
-      selectedItemType: null,
-      selectedItems: null,
-      selectedItemsType: null,
-      isModalOpen: false,
-      openModal: (item, type) => set({ selectedItem: item, selectedItemType: type, selectedItems: null, selectedItemsType: null, isModalOpen: true }),
-      openListModal: (items, type) => set({ selectedItems: items, selectedItemsType: type, selectedItem: null, selectedItemType: null, isModalOpen: true }),
-      closeModal: () => set({ selectedItem: null, selectedItemType: null, selectedItems: null, selectedItemsType: null, isModalOpen: false }),
+      isListModalOpen: false,
+      modalLeads: [],
+      modalTitle: '',
+      openListModal: (leads, title) => set({ isListModalOpen: true, modalLeads: leads, modalTitle: title }),
+      closeListModal: () => set({ isListModalOpen: false, modalLeads: [], modalTitle: '' }),
 
-      // Actions
+      loadInfluencers: async () => {
+        try {
+          const { token } = get();
+          const headers: HeadersInit = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const response = await fetch('http://18.61.48.70:3000/admin/influencers', { headers });
+          if (!response.ok) return;
+          const data = await response.json();
+          set({ influencers: Array.isArray(data) ? data.map((i: any) => ({ ...i, id: String(i.id || i._id) })) : [] });
+        } catch (error) {
+          console.error('Error loading influencers:', error);
+        }
+      },
+
       loadUsers: async () => {
         try {
           const { token } = get();
-          if (!token) return;
-          const response = await fetch('http://18.61.48.70:3000/admin/users', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (!response.ok) throw new Error('Failed to fetch users');
+          const headers: HeadersInit = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const response = await fetch('http://18.61.48.70:3000/admin/users', { headers }); // Assuming this endpoint
+          if (!response.ok) return;
           const data = await response.json();
-          set({ users: Array.isArray(data) ? data : [] });
+          set({ users: Array.isArray(data) ? data.map((u: any) => ({ ...u, id: String(u.id || u._id) })) : [] });
         } catch (error) {
           console.error('Error loading users:', error);
         }
       },
 
-      loadInfluencers: async () => {
-        try {
-          const { token } = get();
-          if (!token) {
-            console.warn('No token found, cannot load influencers from API');
-            return;
-          }
-          const response = await fetch('http://18.61.48.70:3000/admin/influencers', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (!response.ok) {
-            throw new Error('Failed to fetch influencers');
-          }
-          const data = await response.json();
-          console.log('Fetched Influencers Raw Data:', data);
-
-          // Safety mapping to ensure types match
-          const safeData = Array.isArray(data) ? data.map((i: any) => ({
-            ...i,
-            id: String(i.id || i._id),
-            sourceCodes: Array.isArray(i.sourceCodes) ? i.sourceCodes : []
-          })) : [];
-
-          set({ influencers: safeData });
-        } catch (error) {
-          console.error('Error loading influencers:', error);
-
-        }
-      },
-
       loadLeads: async () => {
         try {
-          const { token, dateRange } = get();
-          // Construct URL with query parameters if needed
+          const { token } = get();
           let url = 'http://18.61.48.70:3000/sales/leads';
-
-
-          const headers: HeadersInit = {
-            'Content-Type': 'application/json'
-          };
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-          }
+          const headers: HeadersInit = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
 
           const response = await fetch(url, { headers });
-          if (!response.ok) {
-            console.warn('Failed to fetch leads from API, falling back to fakeApi or empty');
-
-            console.error(`Failed to fetch leads: ${response.status}`);
-            return;
-          }
+          if (!response.ok) return;
           const data = await response.json();
-          // Ensure data is array and normalize IDs and GST field
+
           const cleanData = Array.isArray(data) ? data.map((l: any) => ({
             ...l,
             id: String(l.id || l._id),
@@ -176,12 +128,40 @@ export const useStore = create<Store>()(
               (l.gstCustomer !== undefined ? l.gstCustomer :
                 (l.gst !== undefined ? l.gst : false)),
           })) : [];
+
           set({ leads: cleanData });
         } catch (error) {
           console.error('Error loading leads:', error);
-          // Fallback to fakeApi if absolutely necessary? 
-          // const data = await fakeApi.getLeads(get().dateRange);
-          // set({ leads: data });
+        }
+      },
+
+      loadSales: async () => {
+        try {
+          const { token } = get();
+          let url = 'http://18.61.48.70:3000/sales/leads';
+          const headers: HeadersInit = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const response = await fetch(url, { headers });
+          if (!response.ok) return;
+          const data = await response.json();
+          const isTrue = (val: any) => val === true || val === 'true' || val === 1 || val === '1';
+
+          const salesData: Sale[] = Array.isArray(data) ? data
+            .filter((item: any) => isTrue(item.converted) || Number(item.salesAmount || item.amount || 0) > 0)
+            .map((item: any) => ({
+              id: String(item.id || item._id),
+              leadId: String(item.id || item._id),
+              influencerId: item.influencerId || '',
+              amount: Number(item.salesAmount || item.amount || 0),
+              gst: item.gstStatus === 'YES' || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
+              saleDate: item.updatedAt || item.createdAt || new Date().toISOString(),
+              createdAt: item.createdAt || new Date().toISOString()
+            })) : [];
+
+          set({ sales: salesData });
+        } catch (error) {
+          console.error('Error loading sales:', error);
         }
       },
 
@@ -190,57 +170,11 @@ export const useStore = create<Store>()(
         set({ interactions: data });
       },
 
-      loadSales: async () => {
-        try {
-          const { token, dateRange } = get();
-          let url = 'http://18.61.48.70:3000/sales/leads';
-          const headers: HeadersInit = {
-            'Content-Type': 'application/json'
-          };
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-          }
-
-          const response = await fetch(url, { headers });
-          if (!response.ok) {
-            console.error(`Failed to fetch sales source (leads): ${response.status}`);
-            return;
-          }
-          const data = await response.json();
-          // Map leads to sales
-          // Assuming 'data' indicates Sales if they are converted or just all leads visualization in Sales table
-          const salesData: Sale[] = Array.isArray(data) ? data.map((item: any) => ({
-            id: String(item.id || item._id), // Use lead ID as sale ID/reference
-            leadId: String(item.id || item._id), // mapping lead itself as the relation
-            influencerId: item.influencerId || '',
-            amount: Number(item.salesAmount || item.amount || 0),
-            gst: item.gstStatus === 'YES' || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
-            saleDate: item.updatedAt || item.createdAt || new Date().toISOString(),
-            createdAt: item.createdAt || new Date().toISOString()
-          })) : [];
-
-          // Apply date filtering client-side if API doesn't support it directly yet for consistency
-          // (Optional: The view handles filtering too, but storing raw data is better)
-          set({ sales: salesData });
-
-        } catch (error) {
-          console.error('Error loading sales:', error);
-          // Fallback
-          // const data = await fakeApi.getSales(get().dateRange);
-          // set({ sales: data });
-        }
-      },
-
       addLead: async (lead) => {
         try {
           const { token } = get();
-          // Note: Token might be required. If not, remove Authorization header.
-          const headers: HeadersInit = {
-            'Content-Type': 'application/json',
-          };
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-          }
+          const headers: HeadersInit = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
 
           const response = await fetch('http://18.61.48.70:3000/sales/leads', {
             method: 'POST',
@@ -248,20 +182,13 @@ export const useStore = create<Store>()(
             body: JSON.stringify(lead),
           });
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Failed to add lead: ${response.status} ${errorText}`);
-          }
-
+          if (!response.ok) throw new Error('Failed to add lead');
           const rawLead = await response.json();
           const newLead = {
             ...rawLead,
             id: String(rawLead.id || rawLead._id),
-            gstCustomer: rawLead.gstStatus !== undefined ? rawLead.gstStatus === 'YES' :
-              (rawLead.gstCustomer !== undefined ? rawLead.gstCustomer :
-                (rawLead.gst !== undefined ? rawLead.gst : false)),
+            gstCustomer: rawLead.gstStatus === 'YES' || rawLead.gstCustomer === true
           };
-          // Update local state directly
           set((state) => ({ leads: [...state.leads, newLead] }));
           return newLead;
         } catch (error) {
@@ -273,34 +200,15 @@ export const useStore = create<Store>()(
       updateLead: async (id, updates) => {
         try {
           const { token } = get();
-          if (!token) {
-            console.error('Update lead failed: No auth token found in store');
-            throw new Error('No auth token');
-          }
-
-          console.log(`📡 PATCH Request: http://18.61.48.70:3000/sales/leads/${id}`);
-          console.log('📦 Payload:', updates);
-
+          if (!token) throw new Error('No auth token');
           const response = await fetch(`http://18.61.48.70:3000/sales/leads/${id}`, {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(updates)
           });
-
-          console.log('🏁 Response Status:', response.status);
-
-          if (!response.ok) {
-            const errText = await response.text();
-            console.error('❌ Update Error Response:', errText);
-            throw new Error(`Failed to update lead: ${response.status} ${errText}`);
-          }
-
-          console.log('✅ Lead updated successfully');
+          if (!response.ok) throw new Error('Failed to update lead');
           await get().loadLeads();
-          await get().loadSales(); // Also refresh sales to be sure
+          await get().loadSales();
         } catch (error) {
           console.error('Update lead error:', error);
           throw error;
@@ -309,20 +217,13 @@ export const useStore = create<Store>()(
 
       deleteLead: async (id) => {
         try {
-          const { token, leads } = get();
+          const { token } = get();
           if (!token) throw new Error('No auth token');
-
           const response = await fetch(`http://18.61.48.70:3000/sales/leads/${id}`, {
             method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
           });
-
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Failed to delete lead: ${response.status} ${errText}`);
-          }
+          if (!response.ok) throw new Error('Failed to delete lead');
           await get().loadLeads();
         } catch (error) {
           console.error('Delete lead error:', error);
@@ -336,60 +237,36 @@ export const useStore = create<Store>()(
         await get().loadLeads();
       },
 
-      addSourceCode: async (influencerId: string, code: string) => {
+      addInfluencer: async (influencer) => {
+        await get().loadInfluencers();
+      },
+
+      updateInfluencer: async (id, updates) => {
         try {
           const { token } = get();
           if (!token) throw new Error('No auth token');
-
-          console.log(`Adding source code for influencer: ${influencerId}`);
-
-          // Using specific endpoint for adding source code
-          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${influencerId}/source-code`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              code: code
-            })
+          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(updates)
           });
-
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Failed to add source code: ${response.status} ${errText}`);
-          }
+          if (!response.ok) throw new Error('Failed to update influencer');
           await get().loadInfluencers();
         } catch (error) {
-          console.error('Add source code error:', error);
+          console.error('Update influencer error:', error);
           throw error;
         }
       },
 
-      addInfluencer: async (influencer) => {
-        // await fakeApi.createInfluencer(influencer); // Removed to avoid stale data
-        await get().loadInfluencers();
-      },
-
-      deleteInfluencer: async (id: string) => {
+      deleteInfluencer: async (id) => {
         try {
           const { token } = get();
           if (!token) throw new Error('No auth token');
-
-          console.log(`Deleting influencer with ID: ${id}`);
-          // Using path parameter only as per standard REST and user request
           const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}`, {
             method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
           });
-
-          console.log('Delete response status:', response.status);
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Failed to delete influencer: ${response.status} ${errText}`);
-          }
+          if (!response.ok) throw new Error('Failed to delete influencer');
           await get().loadInfluencers();
         } catch (error) {
           console.error('Delete influencer error:', error);
@@ -397,29 +274,19 @@ export const useStore = create<Store>()(
         }
       },
 
-      updateInfluencer: async (id: string, updates: Partial<Influencer>) => {
+      addSourceCode: async (influencerId, code) => {
         try {
           const { token } = get();
           if (!token) throw new Error('No auth token');
-
-          console.log(`Updating influencer with ID: ${id}`);
-          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(updates)
+          const response = await fetch(`http://18.61.48.70:3000/admin/influencers/${influencerId}/source-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ code })
           });
-
-          console.log('Update response status:', response.status);
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Failed to update influencer: ${response.status} ${errText}`);
-          }
+          if (!response.ok) throw new Error('Failed to add source code');
           await get().loadInfluencers();
         } catch (error) {
-          console.error('Update influencer error:', error);
+          console.error('Add source code error:', error);
           throw error;
         }
       },
