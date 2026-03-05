@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { CalendarIcon, Star, CheckCircle } from 'lucide-react';
 import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
+import { API_BASE_URL } from '@/lib/api';
 
 const states = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -128,7 +129,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         setIsLoading(true);
         try {
           const { token } = useStore.getState();
-          const response = await fetch(`http://18.61.48.70:3000/sales/leads/${initialData.id}`, {
+          const response = await fetch(`${API_BASE_URL}/sales/leads/${initialData.id}`, {
             headers: {
               'Authorization': token ? `Bearer ${token}` : ''
             }

@@ -71,3 +71,9 @@ export interface Sale {
   saleDate: string;
   createdAt: string;
 }
+
+export interface EmployeeSales {
+  id: string;
+  name: string;
+  sales: number;
+}

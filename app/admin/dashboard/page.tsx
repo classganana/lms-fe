@@ -48,7 +48,7 @@ import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 
 export default function AdminDashboardPage() {
-  const { leads, sales, influencers, users, dateRange, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers } = useStore();
+  const { leads, sales, influencers, users, dateRange, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
   const router = useRouter();
 
   useEffect(() => {
@@ -70,6 +70,16 @@ export default function AdminDashboardPage() {
   const [auditSourceCodeFilter, setAuditSourceCodeFilter] = useState('all');
   const [auditFollowUpDateFilter, setAuditFollowUpDateFilter] = useState<Date | undefined>(undefined);
   const [auditSalesPersonFilter, setAuditSalesPersonFilter] = useState('all');
+
+  // Refetch leads from backend when auditor strategist filter changes,
+  // so this funnel is server-driven for owner selection.
+  useEffect(() => {
+    if (auditSalesPersonFilter === 'all') {
+      loadLeads();
+    } else {
+      loadLeads({ salesExecutiveId: auditSalesPersonFilter });
+    }
+  }, [auditSalesPersonFilter, loadLeads]);
 
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingLead, setViewingLead] = useState<any>(null);
@@ -675,17 +685,19 @@ export default function AdminDashboardPage() {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteClick(lead.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {role === 'ADMIN' && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteClick(lead.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                          </div>
                        </TableCell>
                     </TableRow>

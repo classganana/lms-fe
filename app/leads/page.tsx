@@ -31,7 +31,7 @@ import {
 
 
 function LeadsContent() {
-  const { leads, dateRange, deleteLead, loadLeads, influencers, loadInfluencers, users, loadUsers } = useStore();
+  const { leads, dateRange, deleteLead, loadLeads, influencers, loadInfluencers, users, loadUsers, role } = useStore();
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -71,6 +71,15 @@ function LeadsContent() {
     if (rating) setRatingFilter(rating);
     if (view === 'today_followup') setShowTodayFollowUp(true);
   }, [searchParams]);
+
+  // Reload leads from server when sales executive filter changes
+  useEffect(() => {
+    if (salesPersonFilter === 'all') {
+      loadLeads();
+    } else {
+      loadLeads({ salesExecutiveId: salesPersonFilter });
+    }
+  }, [salesPersonFilter, loadLeads]);
 
   const filteredLeads = useMemo(() => {
     let filtered = [...leads];
@@ -127,7 +136,10 @@ function LeadsContent() {
 
     // 4. Rating filter
     if (ratingFilter === 'interested') {
-      filtered = filtered.filter(l => l.rating !== null && l.rating >= 3);
+      // "Interested" view: rating >= 3 and NOT converted
+      filtered = filtered.filter(
+        l => l.rating !== null && l.rating >= 3 && !l.converted
+      );
     } else if (ratingFilter === 'not-interested') {
       filtered = filtered.filter(l => l.rating !== null && l.rating <= 2);
     } else if (ratingFilter !== 'all') {
@@ -522,17 +534,19 @@ function LeadsContent() {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-rose-600 hover:bg-rose-50"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteClick(lead.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {role === 'ADMIN' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-rose-600 hover:bg-rose-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteClick(lead.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

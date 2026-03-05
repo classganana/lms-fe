@@ -44,6 +44,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Lead, User } from '@/types';
+import { API_BASE_URL } from '@/lib/api';
 
 const states = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -55,7 +56,23 @@ const states = [
 ];
 
 export default function SalesPage() {
-  const { sales, leads, influencers, users, dateRange, loadSales, loadLeads, loadInfluencers, loadUsers, deleteLead, updateLead } = useStore();
+  const { 
+    sales, 
+    leads, 
+    influencers, 
+    users, 
+    employeeSales,
+    dateRange, 
+    loadSales, 
+    loadLeads, 
+    loadInfluencers, 
+    loadUsers, 
+    loadEmployeeSales,
+    deleteLead, 
+    updateLead, 
+    role,
+    token,
+  } = useStore();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -79,6 +96,30 @@ export default function SalesPage() {
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [sourceCodeFilter, setSourceCodeFilter] = useState<string>('all');
   const [followUpDateFilter, setFollowUpDateFilter] = useState<Date | undefined>(undefined);
+  // Admin: track per-user daily activity
+  const [activityUserId, setActivityUserId] = useState<string>('all');
+  const [activityDate, setActivityDate] = useState<Date>(new Date());
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [activityData, setActivityData] = useState<{
+    date: string;
+    userId: string;
+    userName: string;
+    createdCount: number;
+    touchedCount: number;
+    leads: Array<{
+      id: string;
+      name?: string;
+      mobile: string;
+      state?: string;
+      city?: string;
+      converted: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    createdLeadIds: string[];
+    interactedLeadIds: string[];
+  } | null>(null);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,7 +133,68 @@ export default function SalesPage() {
     loadLeads();
     loadSales();
     loadUsers();
-  }, [loadInfluencers, loadLeads, loadSales, loadUsers]);
+    if (role === 'ADMIN') {
+      loadEmployeeSales();
+    }
+  }, [loadInfluencers, loadLeads, loadSales, loadUsers, loadEmployeeSales, role]);
+
+  // Load activity whenever admin changes user or date
+  useEffect(() => {
+    const loadActivity = async () => {
+      if (role !== 'ADMIN' || !token || activityUserId === 'all') {
+        setActivityData(null);
+        return;
+      }
+      try {
+        setActivityLoading(true);
+        setActivityError(null);
+        const params = new URLSearchParams();
+        params.set('userId', activityUserId);
+        if (activityDate) {
+          params.set('date', activityDate.toISOString());
+        }
+        const response = await fetch(`${API_BASE_URL}/admin/dashboard/user-activity?${params.toString()}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load user activity');
+        }
+        const data = await response.json();
+        const leads = Array.isArray(data?.leads)
+          ? data.leads.map((l: any) => ({
+              id: String(l.id || l._id),
+              name: l.name ?? '',
+              mobile: l.mobile,
+              state: l.state ?? '',
+              city: l.city ?? '',
+              converted: !!l.converted,
+              createdAt: l.createdAt,
+              updatedAt: l.updatedAt,
+            }))
+          : [];
+        setActivityData({
+          date: data.date,
+          userId: data.userId,
+          userName: data.userName,
+          createdCount: Number(data.createdCount ?? 0),
+          touchedCount: Number(data.touchedCount ?? 0),
+          leads,
+          createdLeadIds: Array.isArray(data.createdLeadIds) ? data.createdLeadIds.map((id: any) => String(id)) : [],
+          interactedLeadIds: Array.isArray(data.interactedLeadIds) ? data.interactedLeadIds.map((id: any) => String(id)) : [],
+        });
+      } catch (error: any) {
+        console.error('Error loading user activity:', error);
+        setActivityError(error?.message || 'Unable to load activity');
+      } finally {
+        setActivityLoading(false);
+      }
+    };
+
+    loadActivity();
+  }, [activityUserId, activityDate, role, token]);
 
   // Reset to first page when any filter changes
   useEffect(() => {
@@ -327,7 +429,7 @@ export default function SalesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-3 mb-4">
+          <TabsList className="grid w-full max-w-xl grid-cols-3 md:grid-cols-5 mb-4">
             <TabsTrigger value="sales" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Sales History
             </TabsTrigger>
@@ -337,6 +439,16 @@ export default function SalesPage() {
             <TabsTrigger value="influencers" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Influencers
             </TabsTrigger>
+            {role === 'ADMIN' && (
+              <>
+                <TabsTrigger value="employee-sales" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  Employee Sales
+                </TabsTrigger>
+                <TabsTrigger value="user-activity" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  User Activity
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           <TabsContent value="sales" className="mt-0">
@@ -669,14 +781,16 @@ export default function SalesPage() {
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-7 w-7 hover:bg-red-50 text-red-600"
-                                    onClick={() => lead && handleDeleteClick(lead.id)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  {role === 'ADMIN' && (
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-7 w-7 hover:bg-red-50 text-red-600"
+                                      onClick={() => lead && handleDeleteClick(lead.id)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -1020,6 +1134,214 @@ export default function SalesPage() {
 
             </Card>
           </TabsContent>
+
+          {role === 'ADMIN' && (
+            <TabsContent value="employee-sales" className="mt-0">
+              <Card className="shadow-lg border-0 bg-white">
+                <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
+                  <CardTitle className="text-xl font-semibold">Employee Sales (This Month)</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Total sales amount per employee for the current month
+                  </p>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold">Employee</TableHead>
+                          <TableHead className="font-semibold text-right">Sales (₹)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {employeeSales.length > 0 ? (
+                          employeeSales.map((emp) => (
+                            <TableRow key={emp.id} className="hover:bg-muted/30 transition-colors">
+                              <TableCell className="font-medium">{emp.name}</TableCell>
+                              <TableCell className="text-right font-semibold text-emerald-600">
+                                ₹{emp.sales.toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                              No employee sales recorded for the current month
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {role === 'ADMIN' && (
+            <TabsContent value="user-activity" className="mt-0">
+              <Card className="shadow-lg border-0 bg-white">
+                <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
+                  <CardTitle className="text-xl font-semibold">User Daily Activity</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    See which leads a selected user has created or updated on a given day.
+                  </p>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <div className="min-w-[200px]">
+                      <Label>Sales User</Label>
+                      <Select value={activityUserId} onValueChange={setActivityUserId}>
+                        <SelectTrigger className="bg-white mt-1">
+                          <SelectValue placeholder="Select user" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white">
+                          <SelectItem value="all">Select user</SelectItem>
+                          {users
+                            .filter((u) => u.role === 'NON_ADMIN')
+                            .map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="min-w-[220px]">
+                      <Label>Activity Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start text-left font-normal bg-white mt-1',
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {activityDate ? format(activityDate, 'PPP') : 'Pick a date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-white" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={activityDate}
+                            onSelect={(d) => d && setActivityDate(d)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {activityError && (
+                    <div className="text-sm text-red-600">
+                      {activityError}
+                    </div>
+                  )}
+
+                  {activityLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <div className="h-5 w-5 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin" />
+                    </div>
+                  ) : activityData && activityUserId !== 'all' ? (
+                    <>
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <Badge variant="outline">
+                          Date: <span className="ml-1 font-semibold">{activityData.date}</span>
+                        </Badge>
+                        <Badge variant="outline">
+                          User: <span className="ml-1 font-semibold">{activityData.userName}</span>
+                        </Badge>
+                        <Badge variant="secondary">
+                          Created Today: <span className="ml-1 font-semibold">{activityData.createdCount}</span>
+                        </Badge>
+                        <Badge variant="secondary">
+                          Updated Today: <span className="ml-1 font-semibold">{activityData.touchedCount}</span>
+                        </Badge>
+                        <Badge>
+                          Total Leads Touched: <span className="ml-1 font-semibold">{activityData.leads.length}</span>
+                        </Badge>
+                      </div>
+
+                      <div className="overflow-x-auto mt-3">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead>Lead Name</TableHead>
+                              <TableHead>Mobile</TableHead>
+                              <TableHead>Location</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Created At</TableHead>
+                              <TableHead className="text-right">Last Updated</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {activityData.leads.length > 0 ? (
+                              activityData.leads.map((lead) => {
+                                const isCreated = activityData.createdLeadIds.includes(lead.id);
+                                const isUpdated = activityData.interactedLeadIds.includes(lead.id);
+                                let statusLabel = '';
+                                let statusVariant: 'outline' | 'secondary' | 'default' = 'outline';
+                                if (isCreated && isUpdated) {
+                                  statusLabel = 'Created & Updated';
+                                  statusVariant = 'default';
+                                } else if (isCreated) {
+                                  statusLabel = 'Created';
+                                  statusVariant = 'secondary';
+                                } else if (isUpdated) {
+                                  statusLabel = 'Updated';
+                                  statusVariant = 'outline';
+                                }
+                                return (
+                                  <TableRow key={lead.id} className="hover:bg-muted/30">
+                                    <TableCell className="font-medium">{lead.name || 'N/A'}</TableCell>
+                                    <TableCell className="font-mono text-sm">{lead.mobile}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                      {[lead.city, lead.state].filter(Boolean).join(', ') || '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex flex-col gap-1">
+                                        {statusLabel && (
+                                          <Badge variant={statusVariant} className="w-fit text-[10px]">
+                                            {statusLabel}
+                                          </Badge>
+                                        )}
+                                        {lead.converted && (
+                                          <Badge variant="success" className="w-fit text-[10px]">
+                                            Converted
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs">
+                                      {lead.createdAt ? format(new Date(lead.createdAt), 'MMM dd, yyyy HH:mm') : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right text-xs">
+                                      {lead.updatedAt ? format(new Date(lead.updatedAt), 'MMM dd, yyyy HH:mm') : '-'}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                  No activity recorded for this user on the selected date.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground py-6">
+                      Select a user to see their activity for the chosen date.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
 
         {/* Delete Confirmation Dialog */}

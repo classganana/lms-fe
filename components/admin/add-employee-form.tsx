@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useStore } from '@/store';
+import { API_BASE_URL } from '@/lib/api';
 import { UserPlus, Users, Smartphone, Mail, Lock } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -57,7 +58,7 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
         isActive: true
       };
 
-      const response = await fetch('http://18.61.48.70:3000/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useStore } from '@/store';
+import { API_BASE_URL } from '@/lib/api';
 import { format } from 'date-fns';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 
@@ -42,7 +43,7 @@ export default function AdminInfluencersPage() {
          alert('Authentication token missing. Please login again.');
          return;
       }
-      const response = await fetch('http://18.61.48.70:3000/admin/influencers', {
+      const response = await fetch(`${API_BASE_URL}/admin/influencers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

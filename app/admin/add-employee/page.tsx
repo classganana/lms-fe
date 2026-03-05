@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
+import { API_BASE_URL } from '@/lib/api';
 import { RefreshCw } from 'lucide-react';
 import { AddEmployeeForm } from '@/components/admin/add-employee-form';
 import { EmployeeList } from '@/components/admin/employee-list';
@@ -25,7 +26,7 @@ export default function AddEmployeePage() {
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
     try {
-      const response = await fetch('http://18.61.48.70:3000/admin/users', {
+      const response = await fetch(`${API_BASE_URL}/admin/users`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

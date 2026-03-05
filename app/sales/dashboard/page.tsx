@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 
 export default function SalesDashboardPage() {
-  const { leads, sales, influencers, users, dateRange, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers } = useStore();
+  const { leads, sales, influencers, users, dateRange, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
   const router = useRouter();
 
   useEffect(() => {
@@ -51,6 +51,16 @@ export default function SalesDashboardPage() {
   const [auditSourceCodeFilter, setAuditSourceCodeFilter] = useState('all');
   const [auditFollowUpDateFilter, setAuditFollowUpDateFilter] = useState<Date | undefined>(undefined);
   const [auditSalesPersonFilter, setAuditSalesPersonFilter] = useState('all');
+
+  // Refetch leads from backend when auditor strategist filter changes,
+  // so this funnel is server-driven for owner selection.
+  useEffect(() => {
+    if (auditSalesPersonFilter === 'all') {
+      loadLeads();
+    } else {
+      loadLeads({ salesExecutiveId: auditSalesPersonFilter });
+    }
+  }, [auditSalesPersonFilter, loadLeads]);
 
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingLead, setViewingLead] = useState<any>(null);
@@ -219,8 +229,13 @@ export default function SalesDashboardPage() {
   const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
   const gstSales = filteredSales.filter(s => s.gst).length;
   const gstPercentage = totalSales > 0 ? (gstSales / totalSales) * 100 : 0;
-  const interestedLeads = filteredLeads.filter(l => l.rating !== null && l.rating >= 3).length;
-  const nonInterestedLeads = filteredLeads.filter(l => l.rating !== null && l.rating <= 2).length;
+  // "Interested" = rating >= 3 and NOT converted
+  const interestedLeads = filteredLeads.filter(
+    l => l.rating !== null && l.rating >= 3 && !l.converted
+  ).length;
+  const nonInterestedLeads = filteredLeads.filter(
+    l => l.rating !== null && l.rating <= 2
+  ).length;
 
   const handleCardClick = (type: 'leads' | 'sales') => {
     if (type === 'sales') {
@@ -728,17 +743,19 @@ export default function SalesDashboardPage() {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0 text-slate-500 hover:text-red-600"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteClick(lead.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {role === 'ADMIN' && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-red-600"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteClick(lead.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                          </div>
                        </TableCell>
                     </TableRow>

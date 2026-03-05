@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useStore } from '@/store';
+import { API_BASE_URL } from '@/lib/api';
 import { Pencil, Trash2, Users, Smartphone, Mail, Lock, Shield, User } from 'lucide-react';
 import {
   Dialog,
@@ -51,7 +52,7 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
 
     try {
       // Try DELETE on the collection route with path param
-      const response = await fetch(`http://18.61.48.70:3000/admin/users/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
         method: 'DELETE',
         headers: {
             'Authorization': `Bearer ${token}`
@@ -114,7 +115,7 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
 
       const id = currentEmployee.id || currentEmployee._id;
       // PATCH on collection route with path param
-      const response = await fetch(`http://18.61.48.70:3000/admin/users/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
