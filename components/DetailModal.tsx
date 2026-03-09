@@ -67,11 +67,23 @@ export function DetailModal() {
 
 // Detail Components
 function InfluencerDetails({ influencer }: { influencer: Influencer }) {
+  const { leads } = useStore();
+  // Lead Source / Conversion Source: unique sourceCode values from leads under this influencer
+  const leadSourceCodes = [...new Set(
+    leads
+      .filter((l) => l.influencerId === influencer.id && l.sourceCode?.trim())
+      .map((l) => l.sourceCode!.trim())
+  )].sort();
+  const sourceDisplay = leadSourceCodes.length > 0
+    ? leadSourceCodes.join(' / ')
+    : 'N/A';
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <InfoCard icon={User} label="Influencer ID" value={influencer.id} />
         <InfoCard icon={User} label="Name" value={influencer.name} valueClass="text-xl font-bold" />
+        <InfoCard icon={TrendingUp} label="Lead Source / Conversion Source" value={sourceDisplay} valueClass="font-semibold" />
       </div>
 
       <Separator />

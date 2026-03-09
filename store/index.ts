@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Lead, Sale, Interaction, Influencer, DateRange, User, Role, EmployeeSales } from '@/types';
 import { fakeApi } from '@/services/fakeApi';
-import { API_BASE_URL } from '@/lib/api';
+import { API_BASE_URL, parseApiError } from '@/lib/api';
 
 interface Store {
   user: User | null;
@@ -56,6 +56,7 @@ interface Store {
   updateInfluencer: (id: string, updates: Partial<Influencer>) => Promise<void>;
   deleteInfluencer: (id: string) => Promise<void>;
   addSourceCode: (influencerId: string, code: string) => Promise<void>;
+  updateSourceCodeStatus: (influencerId: string, code: string, status: 'ACTIVE' | 'INACTIVE') => Promise<void>;
 }
 
 export const useStore = create<Store>()(
@@ -151,7 +152,13 @@ export const useStore = create<Store>()(
 
         loadEmployeeSales: async () => {
           try {
-            const response = await authFetch(`${API_BASE_URL}/admin/dashboard/employee-sales`);
+            const { dateRange } = get();
+            const params = new URLSearchParams();
+            if (dateRange?.from) params.set('startDate', new Date(dateRange.from).toISOString());
+            if (dateRange?.to) params.set('endDate', new Date(dateRange.to).toISOString());
+            const qs = params.toString();
+            const url = qs ? `${API_BASE_URL}/admin/dashboard/employee-sales?${qs}` : `${API_BASE_URL}/admin/dashboard/employee-sales`;
+            const response = await authFetch(url);
             if (!response.ok) return;
             const data = await response.json();
             const employees = Array.isArray(data?.employees) ? data.employees : [];
@@ -187,7 +194,7 @@ export const useStore = create<Store>()(
             const cleanData = Array.isArray(data) ? data.map((l: any) => ({
               ...l,
               id: String(l.id || l._id),
-              gstCustomer: l.gstStatus !== undefined ? l.gstStatus === 'YES' :
+              gstCustomer: l.gstStatus !== undefined ? (l.gstStatus === 'YES' || l.gstStatus === 'APPLIED') :
                 (l.gstCustomer !== undefined ? l.gstCustomer :
                   (l.gst !== undefined ? l.gst : false)),
             })) : [];
@@ -213,7 +220,7 @@ export const useStore = create<Store>()(
                 leadId: String(item.id || item._id),
                 influencerId: item.influencerId || '',
                 amount: Number(item.salesAmount || item.amount || 0),
-                gst: item.gstStatus === 'YES' || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
+                gst: (item.gstStatus === 'YES' || item.gstStatus === 'APPLIED') || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
                 saleDate: item.updatedAt || item.createdAt || new Date().toISOString(),
                 createdAt: item.createdAt || new Date().toISOString()
               })) : [];
@@ -236,12 +243,21 @@ export const useStore = create<Store>()(
               body: JSON.stringify(lead),
             });
 
-            if (!response.ok) throw new Error('Failed to add lead');
+            if (!response.ok) {
+              const body = await response.json().catch(() => ({}));
+              const message = body?.message ?? `Request failed (${response.status})`;
+              const err = new Error(Array.isArray(message) ? message.join('. ') : message) as Error & { leadId?: string };
+              if (response.status === 409) {
+                const id = body?.leadId ?? body?.leadid;
+                if (id) err.leadId = String(id);
+              }
+              throw err;
+            }
             const rawLead = await response.json();
             const newLead = {
               ...rawLead,
               id: String(rawLead.id || rawLead._id),
-              gstCustomer: rawLead.gstStatus === 'YES' || rawLead.gstCustomer === true
+              gstCustomer: (rawLead.gstStatus === 'YES' || rawLead.gstStatus === 'APPLIED') || rawLead.gstCustomer === true
             };
             set((state) => ({ leads: [...state.leads, newLead] }));
             return newLead;
@@ -257,7 +273,10 @@ export const useStore = create<Store>()(
               method: 'PATCH',
               body: JSON.stringify(updates),
             });
-            if (!response.ok) throw new Error('Failed to update lead');
+            if (!response.ok) {
+              const message = await parseApiError(response);
+              throw new Error(message);
+            }
             await get().loadLeads();
             await get().loadSales();
           } catch (error) {
@@ -326,6 +345,20 @@ export const useStore = create<Store>()(
             await get().loadInfluencers();
           } catch (error) {
             console.error('Add source code error:', error);
+            throw error;
+          }
+        },
+
+        updateSourceCodeStatus: async (influencerId, code, status: 'ACTIVE' | 'INACTIVE') => {
+          try {
+            const response = await authFetch(`${API_BASE_URL}/admin/influencers/${influencerId}/source-code/status`, {
+              method: 'PUT',
+              body: JSON.stringify({ code, status }),
+            });
+            if (!response.ok) throw new Error('Failed to update source code status');
+            await get().loadInfluencers();
+          } catch (error) {
+            console.error('Update source code status error:', error);
             throw error;
           }
         },

@@ -223,8 +223,12 @@ export default function AdminDashboardPage() {
   const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
   const totalSales = filteredSales.length;
   const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
-  const gstSales = filteredSales.filter(s => s.gst).length;
-  const gstPercentage = totalSales > 0 ? (gstSales / totalSales) * 100 : 0;
+  // GST % = (pending leads with GST YES/APPLIED / total pending leads) * 100 — only non-converted
+  const isGstLead = (l: { gstStatus?: string; gstCustomer?: boolean; gst?: boolean }) =>
+    l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstCustomer === true || l.gst === true;
+  const pendingLeads = filteredLeads.filter(l => !l.converted).length;
+  const gstPendingLeads = filteredLeads.filter(l => !l.converted && isGstLead(l)).length;
+  const gstPercentage = pendingLeads > 0 ? (gstPendingLeads / pendingLeads) * 100 : 0;
   const interestedLeads = filteredLeads.filter(l => l.rating !== null && l.rating >= 3).length;
   const nonInterestedLeads = filteredLeads.filter(l => l.rating !== null && l.rating <= 2).length;
 
@@ -242,12 +246,26 @@ export default function AdminDashboardPage() {
     today.setHours(0, 0, 0, 0);
 
     return leads.filter(l => {
+      if (l.converted) return false;
       if (!l.followUpDate) return false;
       const fDate = new Date(l.followUpDate);
       fDate.setHours(0, 0, 0, 0);
       return fDate.getTime() === today.getTime();
     });
   }, [leads]);
+
+  const handleCardClick = (type: 'leads' | 'sales' | 'influencers') => {
+    if (type === 'leads') router.push('/leads');
+    else if (type === 'sales') router.push('/sales/sales');
+    else if (type === 'influencers') router.push('/admin/influencers');
+  };
+
+  const handleLeadsClick = (options?: { status?: string; view?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.status) params.set('status', options.status);
+    if (options?.view) params.set('view', options.view);
+    router.push(params.toString() ? `/leads?${params.toString()}` : '/leads');
+  };
 
   return (
     <MainLayout>
@@ -258,7 +276,10 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="kpi-card border-l-4 border-l-blue-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-blue-500 cursor-pointer shadow-sm"
+            onClick={() => handleLeadsClick()}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-blue-600">Total Leads</CardTitle>
             </CardHeader>
@@ -284,7 +305,10 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="kpi-card border-l-4 border-l-green-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-green-500 cursor-pointer shadow-sm"
+            onClick={() => handleLeadsClick({ status: 'converted' })}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-green-600">Converted Counts</CardTitle>
             </CardHeader>
@@ -294,7 +318,10 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="kpi-card border-l-4 border-l-purple-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-purple-500 cursor-pointer shadow-sm"
+            onClick={() => handleLeadsClick()}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-purple-600">Avg conversion</CardTitle>
             </CardHeader>
@@ -304,7 +331,10 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="kpi-card border-l-4 border-l-orange-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-orange-500 cursor-pointer shadow-sm"
+            onClick={() => handleCardClick('sales')}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-orange-600">Total Sales</CardTitle>
             </CardHeader>
@@ -314,7 +344,10 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="kpi-card border-l-4 border-l-emerald-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-emerald-500 cursor-pointer shadow-sm"
+            onClick={() => handleCardClick('sales')}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-emerald-600">Total Revenue</CardTitle>
             </CardHeader>
@@ -324,20 +357,26 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="kpi-card border-l-4 border-l-indigo-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-indigo-500 cursor-pointer shadow-sm"
+            onClick={() => handleCardClick('sales')}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-indigo-600">GST %</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline gap-2 mb-1">
                 <div className="text-4xl font-black">{gstPercentage.toFixed(1)}%</div>
-                <Badge variant="secondary" className="font-bold">{gstSales}/{totalSales}</Badge>
+                <Badge variant="secondary" className="font-bold">{gstPendingLeads}/{pendingLeads}</Badge>
               </div>
-              <p className="text-xs text-slate-400 font-medium">Governance Metrics</p>
+              <p className="text-xs text-slate-400 font-medium">Pending leads with GST</p>
             </CardContent>
           </Card>
 
-          <Card className="kpi-card border-l-4 border-l-pink-500 shadow-sm">
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-pink-500 cursor-pointer shadow-sm"
+            onClick={() => handleCardClick('influencers')}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-pink-600">Influencers</CardTitle>
             </CardHeader>
@@ -555,14 +594,14 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Lead Strategist (Created By)</Label>
+                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</Label>
                           <Select value={auditSalesPersonFilter} onValueChange={setAuditSalesPersonFilter}>
                             <SelectTrigger className="h-10 bg-slate-50">
-                              <SelectValue placeholder="Select Strategist" />
+                              <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
                             <SelectContent className="bg-white">
-                              <SelectItem value="all">Global Strategists</SelectItem>
-                              {users.map(u => (
+                              <SelectItem value="all">All Employees</SelectItem>
+                              {users.filter(u => u.role === 'NON_ADMIN').map(u => (
                                 <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                               ))}
                             </SelectContent>
@@ -579,7 +618,8 @@ export default function AdminDashboardPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 h-10 hover:bg-transparent">
-                    <TableHead className="pl-6 h-10 text-xs font-bold uppercase tracking-wider text-muted-foreground font-black">Lead Profile</TableHead>
+                    <TableHead className="pl-6 h-10 text-xs font-bold uppercase tracking-wider text-muted-foreground font-black">Employee</TableHead>
+                    <TableHead className="h-10 text-xs font-bold uppercase tracking-wider text-muted-foreground font-black">Lead Profile</TableHead>
                     <TableHead className="h-10 text-xs font-bold uppercase tracking-wider text-muted-foreground font-black">Mobile</TableHead>
                     <TableHead className="h-10 text-xs font-bold uppercase tracking-wider text-muted-foreground font-black">State</TableHead>
                     <TableHead className="h-10 text-xs font-bold uppercase tracking-wider text-muted-foreground font-black">GST</TableHead>
@@ -593,8 +633,15 @@ export default function AdminDashboardPage() {
                 <TableBody>
                   {auditedLeads.length > 0 ? auditedLeads.map((lead) => (
                     <TableRow key={lead.id} className="h-12 hover:bg-slate-50 transition-colors cursor-pointer border-b">
+                       <TableCell
+                        className="pl-6 text-sm font-medium text-slate-600"
+                        onClick={() => {
+                          setViewingLead(lead);
+                          setIsViewDialogOpen(true);
+                        }}
+                       >{users.find(u => u.id === lead.createdBy)?.name || '—'}</TableCell>
                        <TableCell 
-                        className="pl-6 font-bold text-sm text-slate-900"
+                        className="font-bold text-sm text-slate-900"
                         onClick={() => {
                           setViewingLead(lead);
                           setIsViewDialogOpen(true);
@@ -703,7 +750,7 @@ export default function AdminDashboardPage() {
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-72 text-center text-muted-foreground font-medium italic">
+                      <TableCell colSpan={10} className="h-72 text-center text-muted-foreground font-medium italic">
                          No audit records matched your current funnel parameters
                       </TableCell>
                     </TableRow>
@@ -734,9 +781,12 @@ export default function AdminDashboardPage() {
                  }}>
                    Reset Engine
                  </Button>
-                 <Button onClick={() => setIsAuditOpen(false)} className="bg-slate-900 font-bold px-8">
-                   Exit Auditor
-                 </Button>
+                 <Button
+                  onClick={() => setIsAuditOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-800 font-bold px-8 shadow-md text-white"
+                >
+                  Exit Auditor
+                </Button>
                </div>
             </div>
           </DialogContent>

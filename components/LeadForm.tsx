@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,18 +33,18 @@ const callStatuses = ['CONNECTED', 'NOT_CONNECTED', 'BUSY', 'WRONG_NUMBER'] as c
 
 const leadSchema = z.object({
   mobile: z.string().min(10, 'Mobile is too short').max(15, 'Mobile is too long'),
-  name: z.string(),
-  state: z.string(),
-  city: z.string(),
-  address: z.string(),
-  pincode: z.string(),
+  name: z.string().optional(),
+  state: z.string().optional(),
+  city: z.string().optional(),
+  address: z.string().optional(),
+  pincode: z.string().optional(),
   email: z.string().email('Invalid email address').or(z.literal('')),
-  influencerId: z.string(),
+  influencerId: z.string().min(1, 'Please select an influencer'),
   sourceCode: z.string().optional(),
-  callStatus: z.enum(callStatuses),
-  rating: z.number().min(1).max(5).nullable(),
-  notes: z.string().optional(),
-  followUpDate: z.date().nullable(),
+  callStatus: z.enum(callStatuses).or(z.literal('')).refine((v) => v !== '', 'Please select call status'),
+  rating: z.number().min(1).max(5).nullable().optional(),
+  notes: z.string().min(1, 'Notes are required'),
+  followUpDate: z.date().nullable().optional(),
   converted: z.boolean(),
   salesAmount: z.number().min(0).optional().nullable(),
   gstCustomer: z.boolean().optional(),
@@ -67,6 +67,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const [discoveredLead, setDiscoveredLead] = useState<Lead | null>(null);
   const [showAlert, setShowAlert] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [mobileReadOnly, setMobileReadOnly] = useState(false);
   const [influencerReadOnly, setInfluencerReadOnly] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -98,7 +99,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       email: '',
       influencerId: '',
       sourceCode: '',
-      callStatus: 'CONNECTED',
+      callStatus: '',
       rating: null,
       notes: '',
       followUpDate: null,
@@ -113,6 +114,16 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const followUpDate = watch('followUpDate');
   const rating = watch('rating');
   const gstCustomer = watch('gstCustomer');
+  const influencerId = watch('influencerId');
+
+  // Reset source code when influencer changes (new influencer may have different codes)
+  const prevInfluencerRef = useRef<string>('');
+  useEffect(() => {
+    if (prevInfluencerRef.current !== influencerId) {
+      prevInfluencerRef.current = influencerId || '';
+      setValue('sourceCode', '');
+    }
+  }, [influencerId, setValue]);
 
   // Check for existing lead and populate form
   useEffect(() => {
@@ -173,7 +184,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           email: String(leadToUse.email || ''),
           influencerId: String(leadToUse.influencerId || ''),
           sourceCode: String(leadToUse.sourceCode || ''),
-          callStatus: leadToUse.callStatus || 'CONNECTED',
+            callStatus: leadToUse.callStatus || '',
           rating: leadToUse.rating ?? null,
           notes: String(leadToUse.notes || ''),
           followUpDate: fDate,
@@ -212,7 +223,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             email: found.email || '',
             influencerId: found.influencerId || '',
             sourceCode: found.sourceCode || '',
-            callStatus: found.callStatus || 'CONNECTED',
+            callStatus: found.callStatus || '',
             rating: found.rating ?? null,
             notes: found.notes || '',
             followUpDate: fDate,
@@ -247,10 +258,14 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       let savedLead: Lead;
       
       const selectedInfluencer = influencers.find(i => String(i.id) === String(data.influencerId));
-      const activeSourceCode =
-        (selectedInfluencer?.sourceCodes ?? []).find(sc => sc.status === 'ACTIVE')?.code ||
-        data.sourceCode ||
-        '';
+      const activeSourceCode = data.sourceCode || '';
+
+      if (data.influencerId && !activeSourceCode) {
+        setSubmitError('Please select a source code.');
+        return;
+      }
+
+      const ratingNum = data.rating != null ? Number(data.rating) : undefined;
 
       const payload: any = {
         name: data.name || '',
@@ -259,12 +274,12 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         city: data.city || '',
         address: data.address || '',
         pincode: data.pincode || '',
-        email: data.email || '',
+        ...(data.email?.trim() && { email: data.email.trim() }),
         influencerId: data.influencerId,
-        sourceCode: activeSourceCode,
+        sourceCode: data.sourceCode || activeSourceCode,
         callStatus: data.callStatus,
-        rating: Number(data.rating) || 0,
-        notes: data.notes || '',
+        ...(ratingNum != null && ratingNum >= 1 && ratingNum <= 5 && { rating: ratingNum }),
+        notes: data.notes,
         converted: data.converted,
         amount: Number(data.salesAmount) || 0,
         salesAmount: Number(data.salesAmount) || 0,
@@ -318,9 +333,16 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       }
       
       setShowConfirmDialog(true);
+      setSubmitError(null);
     } catch (error) {
       console.error('Error saving lead:', error);
-      alert('Failed to save lead. Please try again.');
+      const message = error instanceof Error ? error.message : 'Failed to save lead. Please try again.';
+      const existingLeadId = (error as Error & { leadId?: string }).leadId;
+      setSubmitError(message);
+      if (existingLeadId) {
+        window.location.href = `/sales/add-lead?leadId=${encodeURIComponent(existingLeadId)}&duplicate=1`;
+        return;
+      }
     }
   };
 
@@ -347,6 +369,12 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
 
   const formContent = (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {submitError && (
+        <Alert variant="destructive" className="border-l-4 border-l-destructive shadow-md mb-4">
+          <AlertTitle className="font-semibold">Validation Error</AlertTitle>
+          <AlertDescription className="mt-1">{submitError}</AlertDescription>
+        </Alert>
+      )}
       {(showAlert && (discoveredLead || originalLead)) && (
         <Alert className="border-l-4 border-l-blue-500 shadow-md mb-4">
           <AlertTitle className="font-semibold">Lead Information</AlertTitle>
@@ -478,7 +506,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">Influencer</label>
+          <label className="text-sm font-semibold text-foreground">Influencer <span className="text-destructive">*</span></label>
           <Select
             value={watch('influencerId')}
             onValueChange={(value) => setValue('influencerId', value)}
@@ -505,36 +533,75 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Source Code</label>
-          <Input 
-            value={
-              watch('sourceCode') ||
-              (activeInfluencers
+          <label className="text-sm font-semibold text-foreground">Source Code <span className="text-destructive">*</span></label>
+          <Select
+            value={watch('sourceCode') || 'placeholder'}
+            onValueChange={(value: string) => {
+              if (value === 'placeholder') {
+                setValue('sourceCode', '');
+                return;
+              }
+              setValue('sourceCode', value);
+            }}
+            disabled={!watch('influencerId')}
+          >
+            <SelectTrigger className={cn(
+              "h-11 border-2 transition-colors",
+              !watch('influencerId') ? 'bg-muted' : 'hover:border-primary/50',
+              errors.sourceCode && 'border-destructive'
+            )}>
+              <SelectValue placeholder="Select source code" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              <SelectItem value="placeholder">
+                Select source code
+              </SelectItem>
+              {(activeInfluencers
                 .find(i => String(i.id) === String(watch('influencerId')))
                 ?.sourceCodes ?? []
-              ).find(sc => sc.status === 'ACTIVE')?.code ||
-              ''
-            }
-            readOnly
-            className="h-11 border-2 transition-colors hover:border-primary/50 bg-muted"
-          />
+              ).map((sc) => (
+                <SelectItem key={sc.code} value={sc.code}>
+                  {sc.code}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!watch('influencerId') && (
+            <p className="text-sm text-muted-foreground">Select an influencer first</p>
+          )}
+          {watch('influencerId') && (activeInfluencers.find(i => String(i.id) === String(watch('influencerId')))?.sourceCodes ?? []).length === 0 && (
+            <p className="text-sm text-amber-600">No active source codes — contact admin to activate</p>
+          )}
+          {errors.sourceCode && (
+            <p className="text-sm text-destructive font-medium">{errors.sourceCode.message}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Call Status</label>
+          <label className="text-sm font-semibold text-foreground">Call Status <span className="text-destructive">*</span></label>
           <Select
-            value={watch('callStatus')}
-            onValueChange={(value: typeof callStatuses[number]) => {
-              setValue('callStatus', value);
+            value={watch('callStatus') || 'placeholder'}
+            onValueChange={(value: string) => {
+              if (value === 'placeholder') {
+                setValue('callStatus', '');
+                return;
+              }
+              setValue('callStatus', value as typeof callStatuses[number]);
               if (value === 'WRONG_NUMBER') {
                 setValue('rating', null);
               }
             }}
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger className={cn(
+              "h-11 border-2 transition-colors hover:border-primary/50",
+              errors.callStatus && 'border-destructive'
+            )}>
+              <SelectValue placeholder="Select call status" />
             </SelectTrigger>
             <SelectContent className="bg-white">
+              <SelectItem value="placeholder">
+                Select call status
+              </SelectItem>
               {callStatuses.map((status) => (
                 <SelectItem key={status} value={status}>
                   {status.replace('_', ' ')}
@@ -542,6 +609,9 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
               ))}
             </SelectContent>
           </Select>
+          {errors.callStatus && (
+            <p className="text-sm text-destructive font-medium">{errors.callStatus.message}</p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -568,14 +638,18 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Notes</label>
+          <label className="text-sm font-semibold text-foreground">Notes <span className="text-destructive">*</span></label>
           <Input 
             {...register('notes')} 
             placeholder="Enter notes here..."
             className={cn(
-              "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary"
+              "h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary",
+              errors.notes && 'border-destructive'
             )}
           />
+          {errors.notes && (
+            <p className="text-sm text-destructive font-medium">{errors.notes.message}</p>
+          )}
         </div>
 
         <div className="space-y-2">

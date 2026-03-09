@@ -136,7 +136,7 @@ export default function SalesPage() {
     if (role === 'ADMIN') {
       loadEmployeeSales();
     }
-  }, [loadInfluencers, loadLeads, loadSales, loadUsers, loadEmployeeSales, role]);
+  }, [loadInfluencers, loadLeads, loadSales, loadUsers, loadEmployeeSales, role, dateRange?.from, dateRange?.to]);
 
   // Load activity whenever admin changes user or date
   useEffect(() => {
@@ -396,11 +396,11 @@ export default function SalesPage() {
   }, [filteredPerformance, execPage]);
 
 
-  // Influencer Logic
+  // Influencer Logic (uses filteredSales so date range and other filters apply)
   const filteredInfluencerSales = useMemo(() => {
     const infMap = new Map<string, { name: string; sales: number; revenue: number }>();
     
-    sales.forEach(sale => {
+    filteredSales.forEach(sale => {
       const influencer = influencers.find(i => i.id === sale.influencerId);
       if (influencer) {
         const inf = infMap.get(influencer.id) || { name: influencer.name, sales: 0, revenue: 0 };
@@ -411,7 +411,7 @@ export default function SalesPage() {
     });
 
     return Array.from(infMap.values()).sort((a, b) => b.revenue - a.revenue);
-  }, [sales, influencers]);
+  }, [filteredSales, influencers]);
 
   const infTotalPages = Math.ceil(filteredInfluencerSales.length / ITEMS_PER_PAGE);
   const influencerSales = useMemo(() => {
@@ -1139,9 +1139,13 @@ export default function SalesPage() {
             <TabsContent value="employee-sales" className="mt-0">
               <Card className="shadow-lg border-0 bg-white">
                 <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
-                  <CardTitle className="text-xl font-semibold">Employee Sales (This Month)</CardTitle>
+                  <CardTitle className="text-xl font-semibold">
+                    Employee Sales{dateRange?.from || dateRange?.to ? ' (Selected Period)' : ' (This Month)'}
+                  </CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Total sales amount per employee for the current month
+                    {dateRange?.from && dateRange?.to
+                      ? `Total sales from ${format(new Date(dateRange.from), 'MMM d, yyyy')} to ${format(new Date(dateRange.to), 'MMM d, yyyy')}`
+                      : 'Total sales amount per employee for the current month'}
                   </p>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1166,7 +1170,7 @@ export default function SalesPage() {
                         ) : (
                           <TableRow>
                             <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                              No employee sales recorded for the current month
+                              No employee sales recorded for the selected period
                             </TableCell>
                           </TableRow>
                         )}
@@ -1256,7 +1260,7 @@ export default function SalesPage() {
                           Created Today: <span className="ml-1 font-semibold">{activityData.createdCount}</span>
                         </Badge>
                         <Badge variant="secondary">
-                          Updated Today: <span className="ml-1 font-semibold">{activityData.touchedCount}</span>
+                          Follow up Today: <span className="ml-1 font-semibold">{activityData.touchedCount}</span>
                         </Badge>
                         <Badge>
                           Total Leads Touched: <span className="ml-1 font-semibold">{activityData.leads.length}</span>

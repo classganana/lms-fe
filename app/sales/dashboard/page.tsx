@@ -227,8 +227,12 @@ export default function SalesDashboardPage() {
   const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
   const totalSales = filteredSales.length;
   const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
-  const gstSales = filteredSales.filter(s => s.gst).length;
-  const gstPercentage = totalSales > 0 ? (gstSales / totalSales) * 100 : 0;
+  // GST % = (pending leads with GST YES/APPLIED / total pending leads) * 100 — only non-converted
+  const isGstLead = (l: { gstStatus?: string; gstCustomer?: boolean; gst?: boolean }) =>
+    l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstCustomer === true || l.gst === true;
+  const pendingLeads = filteredLeads.filter(l => !l.converted).length;
+  const gstPendingLeads = filteredLeads.filter(l => !l.converted && isGstLead(l)).length;
+  const gstPercentage = pendingLeads > 0 ? (gstPendingLeads / pendingLeads) * 100 : 0;
   // "Interested" = rating >= 3 and NOT converted
   const interestedLeads = filteredLeads.filter(
     l => l.rating !== null && l.rating >= 3 && !l.converted
@@ -257,6 +261,7 @@ export default function SalesDashboardPage() {
     today.setHours(0, 0, 0, 0);
 
     return leads.filter(l => {
+      if (l.converted) return false;
       if (!l.followUpDate) return false;
       const fDate = new Date(l.followUpDate);
       fDate.setHours(0, 0, 0, 0);
@@ -372,9 +377,9 @@ export default function SalesDashboardPage() {
             <CardContent>
               <div className="flex items-baseline gap-3 mb-1">
                 <div className="text-4xl font-bold text-indigo-600">{gstPercentage.toFixed(1)}%</div>
-                <Badge variant="secondary" className="text-xs">{gstSales}/{totalSales}</Badge>
+                <Badge variant="secondary" className="text-xs">{gstPendingLeads}/{pendingLeads}</Badge>
               </div>
-              <p className="text-xs text-muted-foreground">GST applicable sales</p>
+              <p className="text-xs text-muted-foreground">Pending leads with GST</p>
             </CardContent>
           </Card>
 
@@ -610,14 +615,14 @@ export default function SalesDashboardPage() {
                         </div>
 
                         <div className="col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Lead Strategist (Created By)</Label>
+                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</Label>
                           <Select value={auditSalesPersonFilter} onValueChange={setAuditSalesPersonFilter}>
                             <SelectTrigger className="h-10 bg-slate-50">
-                              <SelectValue placeholder="Select Strategist" />
+                              <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
                             <SelectContent className="bg-white">
-                              <SelectItem value="all">Global Strategists</SelectItem>
-                              {users.map(u => (
+                              <SelectItem value="all">All Employees</SelectItem>
+                              {users.filter(u => u.role === 'NON_ADMIN').map(u => (
                                 <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                               ))}
                             </SelectContent>
@@ -785,9 +790,12 @@ export default function SalesDashboardPage() {
                  }}>
                    Reset Filters
                  </Button>
-                 <Button onClick={() => setIsAuditOpen(false)} className="bg-slate-900">
-                   Close Audit
-                 </Button>
+                 <Button
+                  onClick={() => setIsAuditOpen(false)}
+                  className="bg-slate-900 hover:bg-slate-800 font-bold px-8 shadow-md text-white"
+                >
+                  Close Audit
+                </Button>
                </div>
             </div>
           </DialogContent>

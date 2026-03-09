@@ -84,10 +84,11 @@ function LeadsContent() {
   const filteredLeads = useMemo(() => {
     let filtered = [...leads];
 
-    // Priority 1: Today's Follow-up Mode (Apply as a filter, not an exit)
+    // Priority 1: Today's Follow-up Mode (followup_date = today AND status != converted)
     if (showTodayFollowUp) {
       const todayStr = new Date().toDateString();
       filtered = filtered.filter(l => {
+        if (l.converted) return false;
         if (!l.followUpDate) return false;
         // Compare by local date string to ignore time components
         return new Date(l.followUpDate).toDateString() === todayStr;
@@ -295,6 +296,22 @@ function LeadsContent() {
                   </div>
 
                   <div className="grid grid-cols-3 gap-6">
+                    {role === 'ADMIN' && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</Label>
+                        <Select value={salesPersonFilter} onValueChange={setSalesPersonFilter}>
+                          <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectValue placeholder="Select Employee" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white">
+                            <SelectItem value="all">All Employees</SelectItem>
+                            {users.filter(u => u.role === 'NON_ADMIN').map(u => (
+                              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Workflow Status</Label>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -396,21 +413,6 @@ function LeadsContent() {
                       onChange={(e) => setMaxAmount(e.target.value)}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Assigned Strategist</Label>
-                    <Select value={salesPersonFilter} onValueChange={setSalesPersonFilter}>
-                      <SelectTrigger className="h-10 bg-slate-50">
-                        <SelectValue placeholder="Select Strategist" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white">
-                        <SelectItem value="all">Global Strategists</SelectItem>
-                        {users.map(u => (
-                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   </div>
                 </div>
               </PopoverContent>
@@ -441,6 +443,9 @@ function LeadsContent() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 h-11 hover:bg-transparent">
+                    {role === 'ADMIN' && (
+                      <TableHead className="font-bold text-xs uppercase tracking-wider">Employee</TableHead>
+                    )}
                     <TableHead className="font-bold text-xs uppercase tracking-wider">Name</TableHead>
                     <TableHead className="font-bold text-xs uppercase tracking-wider">Mobile</TableHead>
                     <TableHead className="font-bold text-xs uppercase tracking-wider">State</TableHead>
@@ -460,6 +465,13 @@ function LeadsContent() {
                         className="hover:bg-muted/30 transition-colors group border-b h-14 cursor-pointer"
                         onClick={() => handleRowClick(lead)}
                       >
+                        {role === 'ADMIN' && (
+                          <TableCell>
+                            <span className="text-sm font-medium text-slate-600">
+                              {users.find(u => u.id === lead.createdBy)?.name || '—'}
+                            </span>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
@@ -553,7 +565,7 @@ function LeadsContent() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-16">
+                      <TableCell colSpan={role === 'ADMIN' ? 10 : 9} className="text-center text-muted-foreground py-16">
                         <div className="flex flex-col items-center gap-2">
                           <Search className="h-8 w-8 text-slate-300" />
                           <p>No leads found matching your filters</p>
@@ -564,7 +576,7 @@ function LeadsContent() {
                 </TableBody>
                 <TableFooter className="bg-muted/10 border-t">
                   <TableRow>
-                    <TableCell colSpan={9} className="text-right text-xs font-medium text-muted-foreground px-6 py-3">
+                    <TableCell colSpan={role === 'ADMIN' ? 10 : 9} className="text-right text-xs font-medium text-muted-foreground px-6 py-3">
                       Records Found: {filteredLeads.length}
                     </TableCell>
                   </TableRow>

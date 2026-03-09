@@ -27,7 +27,7 @@ export default function AdminInfluencersPage() {
   const [editingInfluencer, setEditingInfluencer] = useState<{ id: string, name: string } | null>(null);
   const [editName, setEditName] = useState('');
 
-  const { influencers, addSourceCode, addInfluencer, updateInfluencer, deleteInfluencer, loadInfluencers, token } = useStore();
+  const { influencers, addSourceCode, addInfluencer, updateInfluencer, deleteInfluencer, loadInfluencers, updateSourceCodeStatus, token } = useStore();
 
   useEffect(() => {
     loadInfluencers();
@@ -99,6 +99,15 @@ export default function AdminInfluencersPage() {
       await deleteInfluencer(id);
     } catch (error: any) {
       alert(error.message || 'Failed to delete influencer');
+    }
+  };
+
+  const handleToggleSourceCodeStatus = async (influencerId: string, code: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await updateSourceCodeStatus(influencerId, code, newStatus);
+    } catch (error: any) {
+      alert(error.message || 'Failed to update source code status');
     }
   };
 
@@ -244,7 +253,7 @@ export default function AdminInfluencersPage() {
                       <div className="flex flex-wrap gap-2">
                         {(influencer.sourceCodes ?? []).length > 0 ? (
                           (influencer.sourceCodes ?? []).map((sc) => (
-                            <Badge key={sc.id} variant="success" className="px-3 py-1 text-sm">
+                            <Badge key={sc.code} variant="success" className="px-3 py-1 text-sm">
                               {sc.code}
                             </Badge>
                           ))
@@ -263,12 +272,13 @@ export default function AdminInfluencersPage() {
                               <TableHead>Code</TableHead>
                               <TableHead>Status</TableHead>
                               <TableHead>Activated</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {historySourceCodes.length ? (
                                 historySourceCodes.map((sc: any) => (
-                                  <TableRow key={sc.id}>
+                                  <TableRow key={`${sc.code}-${sc.status}`}>
                                     <TableCell className="font-medium">{sc.code}</TableCell>
                                     <TableCell>
                                       <Badge variant={sc.status === 'ACTIVE' ? 'success' : 'secondary'}>
@@ -280,11 +290,20 @@ export default function AdminInfluencersPage() {
                                         ? format(new Date(sc.activatedAt), 'MMM dd, yyyy')
                                         : '-'}
                                     </TableCell>
+                                    <TableCell className="text-right">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleToggleSourceCodeStatus(influencer.id, sc.code, sc.status)}
+                                      >
+                                        {sc.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                      </Button>
+                                    </TableCell>
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={3} className="text-center text-muted-foreground py-4">
+                                  <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
                                     No history available
                                   </TableCell>
                                 </TableRow>
