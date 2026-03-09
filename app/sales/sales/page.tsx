@@ -366,17 +366,37 @@ export default function SalesPage() {
     };
   }, [filteredSales]);
 
-  // Performance Logic
+  // Leads filtered by createdAt (for Performance tab - respects global date filter)
+  const leadsInDateRange = useMemo(() => {
+    if (!dateRange?.from && !dateRange?.to) return leads;
+    return leads.filter(l => {
+      const d = new Date(l.createdAt);
+      d.setHours(0, 0, 0, 0);
+      if (dateRange.from) {
+        const from = new Date(dateRange.from);
+        from.setHours(0, 0, 0, 0);
+        if (d < from) return false;
+      }
+      if (dateRange.to) {
+        const to = new Date(dateRange.to);
+        to.setHours(23, 59, 59, 999);
+        if (d > to) return false;
+      }
+      return true;
+    });
+  }, [leads, dateRange]);
+
+  // Performance Logic (uses date-filtered leads + sales)
   const filteredPerformance = useMemo(() => {
     const stateMap = new Map<string, { name: string; leads: number; sales: number; revenue: number }>();
     
-    leads.forEach(lead => {
+    leadsInDateRange.forEach(lead => {
       const state = stateMap.get(lead.state) || { name: lead.state, leads: 0, sales: 0, revenue: 0 };
       state.leads++;
       stateMap.set(lead.state, state);
     });
 
-    sales.forEach(sale => {
+    filteredSales.forEach(sale => {
       const lead = leads.find(l => l.id === sale.leadId);
       if (lead) {
         const state = stateMap.get(lead.state) || { name: lead.state, leads: 0, sales: 0, revenue: 0 };
@@ -387,7 +407,7 @@ export default function SalesPage() {
     });
 
     return Array.from(stateMap.values()).sort((a, b) => b.revenue - a.revenue);
-  }, [leads, sales]);
+  }, [leadsInDateRange, filteredSales, leads]);
 
   const execTotalPages = Math.ceil(filteredPerformance.length / ITEMS_PER_PAGE);
   const executivePerformance = useMemo(() => {

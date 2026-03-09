@@ -242,15 +242,17 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
                                             >
                                                 <Pencil className="h-4 w-4" />
                                             </Button>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-8 w-8 text-slate-500 bg-red-500 text-white hover:bg-red-350 rounded-lg"
-                                                onClick={() => handleDelete(employee.id || employee._id)}
-                                                title="Delete Employee"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                            {employee.role !== 'ADMIN' && (
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-8 w-8 text-slate-500 bg-red-500 text-white hover:bg-red-350 rounded-lg"
+                                                    onClick={() => handleDelete(employee.id || employee._id)}
+                                                    title="Delete Employee"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )}
                                         </div>
                                     </TableCell>
                                 </TableRow>

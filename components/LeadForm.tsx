@@ -370,9 +370,9 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const formContent = (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {submitError && (
-        <Alert variant="destructive" className="border-l-4 border-l-destructive shadow-md mb-4">
-          <AlertTitle className="font-semibold">Validation Error</AlertTitle>
-          <AlertDescription className="mt-1">{submitError}</AlertDescription>
+        <Alert variant="destructive" className="border-l-4 border-l-red-500 bg-red-50 border-red-200 shadow-md mb-4">
+          <AlertTitle className="font-semibold text-red-700">Validation Error</AlertTitle>
+          <AlertDescription className="mt-1 text-red-600">{submitError}</AlertDescription>
         </Alert>
       )}
       {(showAlert && (discoveredLead || originalLead)) && (
@@ -400,7 +400,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.mobile && (
-            <p className="text-sm text-destructive font-medium">{errors.mobile.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.mobile.message}</p>
           )}
         </div>
 
@@ -415,7 +415,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.name && (
-            <p className="text-sm text-destructive font-medium">{errors.name.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.name.message}</p>
           )}
         </div>
 
@@ -440,7 +440,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             </SelectContent>
           </Select>
           {errors.state && (
-            <p className="text-sm text-destructive font-medium">{errors.state.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.state.message}</p>
           )}
         </div>
 
@@ -455,7 +455,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.city && (
-            <p className="text-sm text-destructive font-medium">{errors.city.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.city.message}</p>
           )}
         </div>
 
@@ -470,7 +470,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.address && (
-            <p className="text-sm text-destructive font-medium">{errors.address.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.address.message}</p>
           )}
         </div>
 
@@ -485,7 +485,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.pincode && (
-            <p className="text-sm text-destructive font-medium">{errors.pincode.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.pincode.message}</p>
           )}
         </div>
 
@@ -501,7 +501,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.email && (
-            <p className="text-sm text-destructive font-medium">{errors.email.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.email.message}</p>
           )}
         </div>
 
@@ -528,7 +528,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             </SelectContent>
           </Select>
           {errors.influencerId && (
-            <p className="text-sm text-destructive font-medium">{errors.influencerId.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.influencerId.message}</p>
           )}
         </div>
 
@@ -573,7 +573,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             <p className="text-sm text-amber-600">No active source codes — contact admin to activate</p>
           )}
           {errors.sourceCode && (
-            <p className="text-sm text-destructive font-medium">{errors.sourceCode.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.sourceCode.message}</p>
           )}
         </div>
 
@@ -610,7 +610,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             </SelectContent>
           </Select>
           {errors.callStatus && (
-            <p className="text-sm text-destructive font-medium">{errors.callStatus.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.callStatus.message}</p>
           )}
         </div>
 
@@ -648,7 +648,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}
           />
           {errors.notes && (
-            <p className="text-sm text-destructive font-medium">{errors.notes.message}</p>
+            <p className="text-sm text-red-600 font-medium">{errors.notes.message}</p>
           )}
         </div>
 
@@ -737,7 +737,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
                 className="h-11 border-2 transition-colors hover:border-primary/50 focus:border-primary"
               />
               {errors.salesAmount && (
-                <p className="text-sm text-destructive font-medium">{errors.salesAmount.message}</p>
+                <p className="text-sm text-red-600 font-medium">{errors.salesAmount.message}</p>
               )}
             </div>
           </>
