@@ -50,7 +50,7 @@ const leadSchema = z.object({
   gstCustomer: z.boolean().optional(),
 });
 
-type LeadFormData = z.infer<typeof leadSchema>;
+type LeadFormData = z.input<typeof leadSchema>;
 
 interface LeadFormProps {
   initialMobile?: string;
