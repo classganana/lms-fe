@@ -281,11 +281,11 @@ export default function AdminDashboardPage() {
             onClick={() => handleLeadsClick()}
           >
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-blue-600">Total Leads</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-blue-600">Total Leads (All)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">{totalLeads}</div>
-              <p className="text-xs text-slate-400 font-medium tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">System-wide registrations</p>
+              <p className="text-xs text-slate-400 font-medium tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">System-wide, all sales executives</p>
             </CardContent>
           </Card>
 

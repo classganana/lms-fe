@@ -284,11 +284,11 @@ export default function SalesDashboardPage() {
             onClick={() => handleLeadsClick()}
           >
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total Leads</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">My Leads</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold mb-1">{totalLeads}</div>
-              <p className="text-xs text-muted-foreground">All time leads</p>
+              <p className="text-xs text-muted-foreground">Leads you created</p>
             </CardContent>
           </Card>
 
@@ -298,7 +298,7 @@ export default function SalesDashboardPage() {
           >
             <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                Leads (This Month)
+                My Leads (This Month)
               </CardTitle>
               <Target className="h-4 w-4 text-sky-500" />
             </CardHeader>
@@ -339,7 +339,7 @@ export default function SalesDashboardPage() {
             onClick={() => handleCardClick('sales')}
           >
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total Sales</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">My Sales</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline gap-2 mb-1">
@@ -359,7 +359,7 @@ export default function SalesDashboardPage() {
             onClick={() => handleCardClick('sales')}
           >
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total Revenue</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">My Revenue</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold mb-1 text-emerald-600">₹{totalRevenue.toLocaleString()}</div>

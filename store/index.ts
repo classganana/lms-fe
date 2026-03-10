@@ -93,7 +93,7 @@ export const useStore = create<Store>()(
         setUser: (user) => set({ user }),
         setRole: (role) => set({ role }),
         setToken: (token) => set({ token }),
-        logout: () => set({ user: null, role: null, token: null }),
+        logout: () => set({ user: null, role: null, token: null, leads: [], sales: [] }),
 
         _hasHydrated: false,
         setHasHydrated: (state) => set({ _hasHydrated: state }),
@@ -246,12 +246,7 @@ export const useStore = create<Store>()(
             if (!response.ok) {
               const body = await response.json().catch(() => ({}));
               const message = body?.message ?? `Request failed (${response.status})`;
-              const err = new Error(Array.isArray(message) ? message.join('. ') : message) as Error & { leadId?: string };
-              if (response.status === 409) {
-                const id = body?.leadId ?? body?.leadid;
-                if (id) err.leadId = String(id);
-              }
-              throw err;
+              throw new Error(Array.isArray(message) ? message.join('. ') : message);
             }
             const rawLead = await response.json();
             const newLead = {

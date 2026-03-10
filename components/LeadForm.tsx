@@ -116,12 +116,16 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const gstCustomer = watch('gstCustomer');
   const influencerId = watch('influencerId');
 
-  // Reset source code when influencer changes (new influencer may have different codes)
+  // Reset source code when user manually changes influencer (new influencer has different codes).
+  // Don't clear during initial form population - only when switching from one influencer to another.
   const prevInfluencerRef = useRef<string>('');
   useEffect(() => {
     if (prevInfluencerRef.current !== influencerId) {
+      const wasInitialSet = prevInfluencerRef.current === '';
       prevInfluencerRef.current = influencerId || '';
-      setValue('sourceCode', '');
+      if (!wasInitialSet) {
+        setValue('sourceCode', '');
+      }
     }
   }, [influencerId, setValue]);
 
@@ -248,10 +252,20 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   }, [initialData, mobile, reset, isInitialLoad]);
 
 
-  const activeInfluencers = influencers.map(inf => ({
-    ...inf,
-    sourceCodes: (inf.sourceCodes ?? []).filter(sc => sc.status === 'ACTIVE'),
-  }));
+  const currentSourceCode = watch('sourceCode');
+  const currentInfluencerId = watch('influencerId');
+  const activeInfluencers = influencers.map(inf => {
+    const activeCodes = (inf.sourceCodes ?? []).filter(sc => sc.status === 'ACTIVE');
+    const hasCurrentInActive = activeCodes.some(sc => sc.code === currentSourceCode);
+    const isSelectedInfluencer = String(inf.id) === String(currentInfluencerId);
+    const existingCode = (inf.sourceCodes ?? []).find(sc => sc.code === currentSourceCode);
+    // When editing, include the lead's existing sourceCode even if INACTIVE so it can be pre-filled
+    const codesToShow =
+      hasCurrentInActive || !currentSourceCode || !existingCode || !isSelectedInfluencer
+        ? activeCodes
+        : [...activeCodes, existingCode];
+    return { ...inf, sourceCodes: codesToShow };
+  });
 
   const onSubmit = async (data: LeadFormData) => {
     try {
@@ -337,12 +351,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     } catch (error) {
       console.error('Error saving lead:', error);
       const message = error instanceof Error ? error.message : 'Failed to save lead. Please try again.';
-      const existingLeadId = (error as Error & { leadId?: string }).leadId;
       setSubmitError(message);
-      if (existingLeadId) {
-        window.location.href = `/sales/add-lead?leadId=${encodeURIComponent(existingLeadId)}&duplicate=1`;
-        return;
-      }
     }
   };
 
