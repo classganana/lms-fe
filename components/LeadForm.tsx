@@ -133,6 +133,14 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   useEffect(() => {
     const isTrue = (val: any) => val === true || val === 'true' || val === 1 || val === '1';
 
+    const extractId = (v: unknown): string => {
+      if (v == null) return '';
+      if (typeof v === 'string') return v;
+      if (typeof v === 'object' && v !== null && '$oid' in v) return String((v as { $oid?: string }).$oid || '');
+      if (typeof (v as any)?.toString === 'function') return (v as any).toString();
+      return String(v);
+    };
+
     const populateForm = async () => {
       // Prevent redundant runs that overwrite fetched state with stale parent props
       if (!isInitialLoad) return;
@@ -165,6 +173,12 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       }
 
       if (leadToUse) {
+        // When editing, wait for influencers to load before populating so the source code dropdown has options (avoids race in production)
+        const needsInfluencers = leadToUse.sourceCode && extractId(leadToUse.influencerId);
+        if (needsInfluencers && influencers.length === 0) {
+          return; // Don't populate yet; effect will re-run when influencers loads
+        }
+
         setOriginalLead(leadToUse);
         
         const backendAmount = Number(leadToUse.salesAmount || (leadToUse as any).amount || 0);
@@ -186,7 +200,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           address: String(leadToUse.address || ''),
           pincode: String(leadToUse.pincode || ''),
           email: String(leadToUse.email || ''),
-          influencerId: String(leadToUse.influencerId || ''),
+          influencerId: extractId(leadToUse.influencerId),
           sourceCode: String(leadToUse.sourceCode || ''),
             callStatus: leadToUse.callStatus || '',
           rating: leadToUse.rating ?? null,
@@ -204,6 +218,10 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         const found = leads.find((l) => l.mobile.includes(cleanSearchMobile));
         
         if (found) {
+          // Wait for influencers so source code dropdown has options
+          if (found.sourceCode && extractId(found.influencerId) && influencers.length === 0) {
+            return;
+          }
           setDiscoveredLead(found);
           setShowAlert(true);
           
@@ -225,7 +243,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             address: found.address || '',
             pincode: found.pincode || '',
             email: found.email || '',
-            influencerId: found.influencerId || '',
+            influencerId: extractId(found.influencerId),
             sourceCode: found.sourceCode || '',
             callStatus: found.callStatus || '',
             rating: found.rating ?? null,
@@ -249,15 +267,24 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     };
 
     populateForm();
-  }, [initialData, mobile, reset, isInitialLoad]);
+  }, [initialData, mobile, reset, isInitialLoad, influencers]);
 
 
   const currentSourceCode = watch('sourceCode');
   const currentInfluencerId = watch('influencerId');
+
+  const toId = (v: unknown): string => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'object' && v !== null && '$oid' in v) return String((v as { $oid?: string }).$oid || '');
+    if (typeof (v as any)?.toString === 'function') return (v as any).toString();
+    return String(v);
+  };
+
   const activeInfluencers = influencers.map(inf => {
     const activeCodes = (inf.sourceCodes ?? []).filter(sc => sc.status === 'ACTIVE');
     const hasCurrentInActive = activeCodes.some(sc => sc.code === currentSourceCode);
-    const isSelectedInfluencer = String(inf.id) === String(currentInfluencerId);
+    const isSelectedInfluencer = toId(inf.id) === toId(currentInfluencerId);
     const existingCode = (inf.sourceCodes ?? []).find(sc => sc.code === currentSourceCode);
     // When editing, include the lead's existing sourceCode even if INACTIVE so it can be pre-filled
     const codesToShow =
@@ -266,6 +293,8 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         : [...activeCodes, existingCode];
     return { ...inf, sourceCodes: codesToShow };
   });
+
+  const sourceCodeOptions = activeInfluencers.find(i => toId(i.id) === toId(currentInfluencerId))?.sourceCodes ?? [];
 
   const onSubmit = async (data: LeadFormData) => {
     try {
@@ -571,10 +600,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
               <SelectItem value="placeholder">
                 Select source code
               </SelectItem>
-              {(activeInfluencers
-                .find(i => String(i.id) === String(watch('influencerId')))
-                ?.sourceCodes ?? []
-              ).map((sc) => (
+              {sourceCodeOptions.map((sc) => (
                 <SelectItem key={sc.code} value={sc.code}>
                   {sc.code}
                 </SelectItem>
