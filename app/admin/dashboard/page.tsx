@@ -260,10 +260,11 @@ export default function AdminDashboardPage() {
     else if (type === 'influencers') router.push('/admin/influencers');
   };
 
-  const handleLeadsClick = (options?: { status?: string; view?: string }) => {
+  const handleLeadsClick = (options?: { status?: string; view?: string; gst?: string }) => {
     const params = new URLSearchParams();
     if (options?.status) params.set('status', options.status);
     if (options?.view) params.set('view', options.view);
+    if (options?.gst) params.set('gst', options.gst);
     router.push(params.toString() ? `/leads?${params.toString()}` : '/leads');
   };
 
@@ -359,7 +360,7 @@ export default function AdminDashboardPage() {
 
           <Card
             className="kpi-card card-hover border-l-4 border-l-indigo-500 cursor-pointer shadow-sm"
-            onClick={() => handleCardClick('sales')}
+            onClick={() => handleLeadsClick({ gst: 'yes' })}
           >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-indigo-600">GST %</CardTitle>

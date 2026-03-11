@@ -351,7 +351,13 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     } catch (error) {
       console.error('Error saving lead:', error);
       const message = error instanceof Error ? error.message : 'Failed to save lead. Please try again.';
+      const existingLeadId = (error as Error & { leadId?: string }).leadId;
       setSubmitError(message);
+      // Same-user duplicate: navigate to edit so they can update their own lead (no page refresh)
+      if (existingLeadId) {
+        router.push(`/sales/add-lead?leadId=${encodeURIComponent(existingLeadId)}&duplicate=1`);
+        return;
+      }
     }
   };
 

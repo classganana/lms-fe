@@ -57,6 +57,7 @@ interface Store {
   deleteInfluencer: (id: string) => Promise<void>;
   addSourceCode: (influencerId: string, code: string) => Promise<void>;
   updateSourceCodeStatus: (influencerId: string, code: string, status: 'ACTIVE' | 'INACTIVE') => Promise<void>;
+  deleteSourceCode: (influencerId: string, code: string) => Promise<void>;
 }
 
 export const useStore = create<Store>()(
@@ -246,7 +247,11 @@ export const useStore = create<Store>()(
             if (!response.ok) {
               const body = await response.json().catch(() => ({}));
               const message = body?.message ?? `Request failed (${response.status})`;
-              throw new Error(Array.isArray(message) ? message.join('. ') : message);
+              const err = new Error(Array.isArray(message) ? message.join('. ') : message) as Error & { leadId?: string };
+              if (response.status === 409 && (body?.leadId ?? body?.leadid)) {
+                err.leadId = String(body.leadId ?? body.leadid);
+              }
+              throw err;
             }
             const rawLead = await response.json();
             const newLead = {
@@ -354,6 +359,21 @@ export const useStore = create<Store>()(
             await get().loadInfluencers();
           } catch (error) {
             console.error('Update source code status error:', error);
+            throw error;
+          }
+        },
+
+        deleteSourceCode: async (influencerId, code) => {
+          try {
+            const params = new URLSearchParams();
+            params.set('code', code);
+            const response = await authFetch(`${API_BASE_URL}/admin/influencers/${influencerId}/source-code?${params.toString()}`, {
+              method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete source code');
+            await get().loadInfluencers();
+          } catch (error) {
+            console.error('Delete source code error:', error);
             throw error;
           }
         },

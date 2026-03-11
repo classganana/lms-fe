@@ -36,7 +36,7 @@ function AddLeadContent() {
             {leadId ? 'Update existing lead information' : 'Create or update lead information'}
           </p>
         </div>
-        <LeadForm initialData={initialData} />
+        <LeadForm key={leadId || 'new'} initialData={initialData} />
       </div>
     </MainLayout>
   );

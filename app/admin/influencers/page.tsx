@@ -27,7 +27,7 @@ export default function AdminInfluencersPage() {
   const [editingInfluencer, setEditingInfluencer] = useState<{ id: string, name: string } | null>(null);
   const [editName, setEditName] = useState('');
 
-  const { influencers, addSourceCode, addInfluencer, updateInfluencer, deleteInfluencer, loadInfluencers, updateSourceCodeStatus, token } = useStore();
+  const { influencers, addSourceCode, addInfluencer, updateInfluencer, deleteInfluencer, loadInfluencers, updateSourceCodeStatus, deleteSourceCode, token } = useStore();
 
   useEffect(() => {
     loadInfluencers();
@@ -108,6 +108,15 @@ export default function AdminInfluencersPage() {
       await updateSourceCodeStatus(influencerId, code, newStatus);
     } catch (error: any) {
       alert(error.message || 'Failed to update source code status');
+    }
+  };
+
+  const handleDeleteSourceCode = async (influencerId: string, code: string) => {
+    if (!confirm(`Are you sure you want to delete source code "${code}"? This cannot be undone.`)) return;
+    try {
+      await deleteSourceCode(influencerId, code);
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete source code');
     }
   };
 
@@ -291,13 +300,23 @@ export default function AdminInfluencersPage() {
                                         : '-'}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleToggleSourceCodeStatus(influencer.id, sc.code, sc.status)}
-                                      >
-                                        {sc.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                                      </Button>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleToggleSourceCodeStatus(influencer.id, sc.code, sc.status)}
+                                        >
+                                          {sc.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-destructive hover:text-destructive"
+                                          onClick={() => handleDeleteSourceCode(influencer.id, sc.code)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     </TableCell>
                                   </TableRow>
                                 ))

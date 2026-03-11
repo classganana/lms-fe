@@ -66,10 +66,12 @@ function LeadsContent() {
     const status = searchParams.get('status');
     const rating = searchParams.get('rating');
     const view = searchParams.get('view');
+    const gst = searchParams.get('gst');
     
     if (status) setStatusFilter(status);
     if (rating) setRatingFilter(rating);
     if (view === 'today_followup') setShowTodayFollowUp(true);
+    if (gst === 'yes' || gst === 'no') setGstFilter(gst);
   }, [searchParams]);
 
   // Reload leads from server when sales executive filter changes
