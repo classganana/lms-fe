@@ -48,11 +48,17 @@ function LeadsContent() {
   
   const [influencerFilter, setInfluencerFilter] = useState('all');
   const [gstFilter, setGstFilter] = useState('all');
+  const [callStatusFilter, setCallStatusFilter] = useState<string>('all');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [sourceCodeFilter, setSourceCodeFilter] = useState('all');
   const [followUpDateFilter, setFollowUpDateFilter] = useState<Date | undefined>(undefined);
   const [salesPersonFilter, setSalesPersonFilter] = useState('all');
+
+  // Reset source code when influencer changes to 'all' (source codes are per-influencer)
+  useEffect(() => {
+    if (influencerFilter === 'all') setSourceCodeFilter('all');
+  }, [influencerFilter]);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -159,6 +165,10 @@ function LeadsContent() {
       filtered = filtered.filter(l => l.gstCustomer === isGst);
     }
 
+    if (callStatusFilter !== 'all') {
+      filtered = filtered.filter(l => l.callStatus === callStatusFilter);
+    }
+
     if (sourceCodeFilter !== 'all') {
       filtered = filtered.filter(l => l.sourceCode === sourceCodeFilter);
     }
@@ -185,7 +195,7 @@ function LeadsContent() {
     }
 
     return filtered;
-  }, [leads, dateRange, statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp, influencerFilter, gstFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, salesPersonFilter]);
+  }, [leads, dateRange, statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp, influencerFilter, gstFilter, callStatusFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, salesPersonFilter]);
 
   const handleEditClick = (lead: Lead) => {
     setEditingLead(lead);
@@ -264,7 +274,7 @@ function LeadsContent() {
                 <Button variant="outline" className="h-11 gap-2 border-dashed border-slate-300 px-6 font-bold text-slate-700 bg-white">
                   <Filter className="h-4 w-4" />
                   Leads Funnel
-                  {(statusFilter !== 'all' || ratingFilter !== 'all' || influencerFilter !== 'all' || gstFilter !== 'all' || minAmount || maxAmount || sourceCodeFilter !== 'all' || followUpDateFilter || salesPersonFilter !== 'all') && (
+                  {(statusFilter !== 'all' || ratingFilter !== 'all' || influencerFilter !== 'all' || gstFilter !== 'all' || callStatusFilter !== 'all' || minAmount || maxAmount || sourceCodeFilter !== 'all' || followUpDateFilter || salesPersonFilter !== 'all') && (
                     <Badge variant="secondary" className="ml-1 px-1 h-5 min-w-[1.25rem] bg-blue-100 text-blue-700">
                       !
                     </Badge>
@@ -284,6 +294,7 @@ function LeadsContent() {
                         setRatingFilter('all');
                         setInfluencerFilter('all');
                         setGstFilter('all');
+                        setCallStatusFilter('all');
                         setMinAmount('');
                         setMaxAmount('');
                         setSourceCodeFilter('all');
@@ -373,6 +384,41 @@ function LeadsContent() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Call Status</Label>
+                      <Select value={callStatusFilter} onValueChange={setCallStatusFilter}>
+                        <SelectTrigger className="h-10 bg-slate-50">
+                          <SelectValue placeholder="Call Status" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white">
+                          <SelectItem value="all">Any Status</SelectItem>
+                          <SelectItem value="CONNECTED">Connected</SelectItem>
+                          <SelectItem value="NOT_CONNECTED">Not Connected</SelectItem>
+                          <SelectItem value="BUSY">Busy</SelectItem>
+                          <SelectItem value="WRONG_NUMBER">Wrong Number</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {influencerFilter !== 'all' && (
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Source Code</Label>
+                        <Select value={sourceCodeFilter} onValueChange={setSourceCodeFilter}>
+                          <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectValue placeholder="Source Code" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white">
+                            <SelectItem value="all">All Codes</SelectItem>
+                            {(influencers.find(inf => inf.id === influencerFilter)?.sourceCodes ?? [])
+                              .filter((sc: { status?: string }) => sc.status !== 'INACTIVE')
+                              .map((sc: { code: string }) => (
+                                <SelectItem key={sc.code} value={sc.code}>{sc.code}</SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Planned Interaction Date</Label>

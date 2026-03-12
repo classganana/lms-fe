@@ -192,12 +192,21 @@ export const useStore = create<Store>()(
             if (!response.ok) return;
             const data = await response.json();
 
+            const toId = (v: unknown) => {
+              if (v == null) return '';
+              if (typeof v === 'string') return v;
+              if (typeof v === 'object' && v !== null && '$oid' in v) return String((v as { $oid?: string }).$oid || '');
+              if (typeof (v as any)?.toString === 'function') return (v as any).toString();
+              return String(v);
+            };
             const cleanData = Array.isArray(data) ? data.map((l: any) => ({
               ...l,
               id: String(l.id || l._id),
-              gstCustomer: l.gstStatus !== undefined ? (l.gstStatus === 'YES' || l.gstStatus === 'APPLIED') :
+              createdBy: toId(l.createdBy) || l.createdBy,
+              gstCustomer: l.gstStatus !== undefined ? (l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstStatus === 'APPLIED_THROUGH_US') :
                 (l.gstCustomer !== undefined ? l.gstCustomer :
                   (l.gst !== undefined ? l.gst : false)),
+              gstStatus: l.gstStatus,
             })) : [];
 
             set({ leads: cleanData });
@@ -221,7 +230,7 @@ export const useStore = create<Store>()(
                 leadId: String(item.id || item._id),
                 influencerId: item.influencerId || '',
                 amount: Number(item.salesAmount || item.amount || 0),
-                gst: (item.gstStatus === 'YES' || item.gstStatus === 'APPLIED') || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
+                gst: (item.gstStatus === 'YES' || item.gstStatus === 'APPLIED' || item.gstStatus === 'APPLIED_THROUGH_US') || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
                 saleDate: item.updatedAt || item.createdAt || new Date().toISOString(),
                 createdAt: item.createdAt || new Date().toISOString()
               })) : [];
@@ -257,7 +266,7 @@ export const useStore = create<Store>()(
             const newLead = {
               ...rawLead,
               id: String(rawLead.id || rawLead._id),
-              gstCustomer: (rawLead.gstStatus === 'YES' || rawLead.gstStatus === 'APPLIED') || rawLead.gstCustomer === true
+              gstCustomer: (rawLead.gstStatus === 'YES' || rawLead.gstStatus === 'APPLIED' || rawLead.gstStatus === 'APPLIED_THROUGH_US') || rawLead.gstCustomer === true
             };
             set((state) => ({ leads: [...state.leads, newLead] }));
             return newLead;

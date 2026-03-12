@@ -39,7 +39,7 @@ export interface Lead {
   followUpDate: string | null;
   converted: boolean;
   gst?: boolean;
-  gstStatus?: 'YES' | 'NO';
+  gstStatus?: 'YES' | 'NO' | 'APPLIED' | 'APPLIED_THROUGH_US';
   gstCustomer?: boolean;
   salesAmount?: number | null;
   createdAt: string;

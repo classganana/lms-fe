@@ -151,7 +151,7 @@ export default function SalesPage() {
         const params = new URLSearchParams();
         params.set('userId', activityUserId);
         if (activityDate) {
-          params.set('date', activityDate.toISOString());
+          params.set('date', format(activityDate, 'yyyy-MM-dd'));
         }
         const response = await fetch(`${API_BASE_URL}/admin/dashboard/user-activity?${params.toString()}`, {
           headers: {
@@ -203,6 +203,12 @@ export default function SalesPage() {
     setInfPage(1);
   }, [influencerFilter, salesPersonFilter, gstFilter, mobileFilter, nameFilter, callStatusFilter, ratingFilter, convertedFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, dateRange, activeTab]);
 
+  // Non-admin: reset to Sales tab if on admin-only tab (Performance, Employee Sales, User Activity)
+  useEffect(() => {
+    if (role !== 'ADMIN' && ['executives', 'employee-sales', 'user-activity'].includes(activeTab)) {
+      setActiveTab('sales');
+    }
+  }, [role, activeTab]);
 
   const handleDeleteClick = (id: string) => {
     setDeleteId(id);
@@ -449,18 +455,18 @@ export default function SalesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-xl grid-cols-3 md:grid-cols-5 mb-4">
+          <TabsList className={cn("grid w-full max-w-xl mb-4", role === 'ADMIN' ? "grid-cols-3 md:grid-cols-5" : "grid-cols-2")}>
             <TabsTrigger value="sales" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Sales History
-            </TabsTrigger>
-            <TabsTrigger value="executives" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Performance
             </TabsTrigger>
             <TabsTrigger value="influencers" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Influencers
             </TabsTrigger>
             {role === 'ADMIN' && (
               <>
+                <TabsTrigger value="executives" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  Performance
+                </TabsTrigger>
                 <TabsTrigger value="employee-sales" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                   Employee Sales
                 </TabsTrigger>
@@ -530,7 +536,6 @@ export default function SalesPage() {
                                 setCallStatusFilter('all');
                                 setRatingFilter('all');
                                 setConvertedFilter('all');
-                                setMinAmount('');
                                 setMinAmount('');
                                 setMaxAmount('');
                                 setSourceCodeFilter('all');
@@ -604,20 +609,22 @@ export default function SalesPage() {
                             </div>
                           )}
 
-                          <div className="space-y-3">
-                            <Label>Sales Person</Label>
-                            <Select value={salesPersonFilter} onValueChange={setSalesPersonFilter}>
-                              <SelectTrigger className="bg-white">
-                                <SelectValue placeholder="Select Sales Person" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-white">
-                                <SelectItem value="all">All Sales Persons</SelectItem>
-                                {users.map((user) => (
-                                  <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          {role === 'ADMIN' && (
+                            <div className="space-y-3">
+                              <Label>Sales Person</Label>
+                              <Select value={salesPersonFilter} onValueChange={setSalesPersonFilter}>
+                                <SelectTrigger className="bg-white">
+                                  <SelectValue placeholder="Select Sales Person" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white">
+                                  <SelectItem value="all">All Sales Persons</SelectItem>
+                                  {users.map((user) => (
+                                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
 
                           <div className="space-y-3">
                              <Label>Call Status</Label>
@@ -747,7 +754,9 @@ export default function SalesPage() {
                       <TableRow className="bg-muted/50 h-10 hover:bg-transparent">
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Sale Date</TableHead>
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Lead Name</TableHead>
-                        <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Sales Person</TableHead>
+                        {role === 'ADMIN' && (
+                          <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Sales Person</TableHead>
+                        )}
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Mobile</TableHead>
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Influencer</TableHead>
                         <TableHead className="h-10 px-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Follow Up</TableHead>
@@ -772,9 +781,11 @@ export default function SalesPage() {
                             >
                               <TableCell className="py-2 px-2 font-medium text-xs">{format(new Date(sale.saleDate), 'MMM dd, yyyy')}</TableCell>
                               <TableCell className="py-2 px-2 text-xs font-medium">{lead?.name || 'N/A'}</TableCell>
-                              <TableCell className="py-2 px-2 text-xs text-muted-foreground">
-                                {users.find(u => u.id === lead?.createdBy)?.name || 'Unknown'}
-                              </TableCell>
+                              {role === 'ADMIN' && (
+                                <TableCell className="py-2 px-2 text-xs text-muted-foreground">
+                                  {users.find(u => u.id === lead?.createdBy)?.name || 'Unknown'}
+                                </TableCell>
+                              )}
                               <TableCell className="py-2 px-2 font-mono text-xs">{lead?.mobile || 'N/A'}</TableCell>
                               <TableCell className="py-2 px-2 text-xs">{influencer?.name || 'N/A'}</TableCell>
                               <TableCell className="py-2 px-2 text-xs">
@@ -818,7 +829,7 @@ export default function SalesPage() {
                         })
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                          <TableCell colSpan={role === 'ADMIN' ? 10 : 9} className="text-center text-muted-foreground py-12">
                             <div className="flex flex-col items-center justify-center gap-2">
                               <p>No sales found matching your filters</p>
                               <Button 

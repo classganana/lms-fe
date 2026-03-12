@@ -31,6 +31,14 @@ const states = [
 
 const callStatuses = ['CONNECTED', 'NOT_CONNECTED', 'BUSY', 'WRONG_NUMBER'] as const;
 
+const gstStatuses = ['NO', 'YES', 'APPLIED', 'APPLIED_THROUGH_US'] as const;
+const GST_LABELS: Record<(typeof gstStatuses)[number], string> = {
+  NO: 'No',
+  YES: 'Yes',
+  APPLIED: 'Applied',
+  APPLIED_THROUGH_US: 'Applied Through Us',
+};
+
 const leadSchema = z.object({
   mobile: z.string().min(10, 'Mobile is too short').max(15, 'Mobile is too long'),
   name: z.string().optional(),
@@ -47,7 +55,7 @@ const leadSchema = z.object({
   followUpDate: z.date().nullable().optional(),
   converted: z.boolean(),
   salesAmount: z.number().min(0).optional().nullable(),
-  gstCustomer: z.boolean().optional(),
+  gstStatus: z.enum(gstStatuses).default('NO'),
 });
 
 type LeadFormData = z.input<typeof leadSchema>;
@@ -105,7 +113,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       followUpDate: null,
       converted: false,
       salesAmount: null,
-      gstCustomer: false,
+      gstStatus: 'NO',
     },
   });
 
@@ -113,7 +121,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const converted = watch('converted');
   const followUpDate = watch('followUpDate');
   const rating = watch('rating');
-  const gstCustomer = watch('gstCustomer');
+  const gstStatus = watch('gstStatus');
   const influencerId = watch('influencerId');
 
   // Reset source code when user manually changes influencer (new influencer has different codes).
@@ -183,7 +191,11 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         
         const backendAmount = Number(leadToUse.salesAmount || (leadToUse as any).amount || 0);
         const isConverted = isTrue(leadToUse.converted) || backendAmount > 0;
-        const isGst = leadToUse.gstStatus === 'YES' || isTrue(leadToUse.gstStatus) || isTrue(leadToUse.gst) || isTrue(leadToUse.gstCustomer);
+        const resolvedGst = (leadToUse as any).gstStatus && gstStatuses.includes((leadToUse as any).gstStatus as any)
+          ? (leadToUse as any).gstStatus
+          : (leadToUse.gstStatus === 'YES' || leadToUse.gstStatus === 'APPLIED' || leadToUse.gstStatus === 'APPLIED_THROUGH_US' || isTrue(leadToUse.gst) || isTrue(leadToUse.gstCustomer))
+            ? 'YES'
+            : 'NO';
 
         // Robust date parsing
         let fDate: Date | null = null;
@@ -208,7 +220,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           followUpDate: fDate,
           converted: isConverted,
           salesAmount: backendAmount || null,
-          gstCustomer: isGst,
+          gstStatus: resolvedGst,
         });
 
         if (leadToUse.influencerId) setInfluencerReadOnly(true);
@@ -227,7 +239,11 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           
           const backendAmount = Number(found.salesAmount || (found as any).amount || 0);
           const isConverted = isTrue(found.converted) || backendAmount > 0;
-          const isGst = found.gstStatus === 'YES' || isTrue(found.gstStatus) || isTrue(found.gst) || isTrue(found.gstCustomer);
+          const resolvedGstFound = (found as any).gstStatus && gstStatuses.includes((found as any).gstStatus as any)
+            ? (found as any).gstStatus
+            : (found.gstStatus === 'YES' || found.gstStatus === 'APPLIED' || found.gstStatus === 'APPLIED_THROUGH_US' || isTrue(found.gst) || isTrue(found.gstCustomer))
+              ? 'YES'
+              : 'NO';
 
           let fDate: Date | null = null;
           if (found.followUpDate) {
@@ -251,7 +267,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             followUpDate: fDate,
             converted: isConverted,
             salesAmount: backendAmount || null,
-            gstCustomer: isGst,
+            gstStatus: resolvedGstFound,
           });
 
           setInfluencerReadOnly(true);
@@ -326,9 +342,9 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         converted: data.converted,
         amount: Number(data.salesAmount) || 0,
         salesAmount: Number(data.salesAmount) || 0,
-        gstStatus: data.gstCustomer ? 'YES' : 'NO',
-        gst: Boolean(data.gstCustomer),
-        gstCustomer: Boolean(data.gstCustomer),
+        gstStatus: data.gstStatus || 'NO',
+        gst: ['YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(data.gstStatus || 'NO'),
+        gstCustomer: ['YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(data.gstStatus || 'NO'),
         followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
       };
 
@@ -369,7 +385,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             leadId: savedLead.id,
             influencerId: savedLead.influencerId,
             amount: data.salesAmount || 0,
-            gst: data.gstCustomer || false,
+            gst: ['YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(data.gstStatus || 'NO'),
             saleDate: new Date().toISOString(),
           });
         }
@@ -744,27 +760,25 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-foreground">GST Customer</label>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setValue('gstCustomer', !gstCustomer)}
-              className={cn(
-                "relative inline-flex h-7 w-14 items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-                gstCustomer ? "bg-blue-500" : "bg-slate-300"
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform",
-                  gstCustomer ? "translate-x-8" : "translate-x-1"
-                )}
-              />
-            </button>
-            <span className={cn("text-sm font-semibold transition-colors", gstCustomer ? "text-blue-600" : "text-slate-500")}>
-              {gstCustomer ? 'Yes' : 'No'}
-            </span>
-          </div>
+          <label className="text-sm font-semibold text-foreground">GST Status</label>
+          <Select
+            value={gstStatus || 'NO'}
+            onValueChange={(v) => setValue('gstStatus', v as (typeof gstStatuses)[number])}
+          >
+            <SelectTrigger className={cn("h-11 border-2 transition-colors hover:border-primary/50", errors.gstStatus && "border-destructive")}>
+              <SelectValue placeholder="Select GST status" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {gstStatuses.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {GST_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.gstStatus && (
+            <p className="text-sm text-red-600 font-medium">{errors.gstStatus.message}</p>
+          )}
         </div>
 
         {converted && (

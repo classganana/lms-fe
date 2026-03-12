@@ -65,6 +65,7 @@ export default function AdminDashboardPage() {
   const [auditRating, setAuditRating] = useState('all');
   const [auditInfluencerFilter, setAuditInfluencerFilter] = useState('all');
   const [auditGstFilter, setAuditGstFilter] = useState('all');
+  const [auditCallStatusFilter, setAuditCallStatusFilter] = useState('all');
   const [auditMinAmount, setAuditMinAmount] = useState('');
   const [auditMaxAmount, setAuditMaxAmount] = useState('');
   const [auditSourceCodeFilter, setAuditSourceCodeFilter] = useState('all');
@@ -80,6 +81,11 @@ export default function AdminDashboardPage() {
       loadLeads({ salesExecutiveId: auditSalesPersonFilter });
     }
   }, [auditSalesPersonFilter, loadLeads]);
+
+  // Reset source code when influencer changes to 'all' (source codes are per-influencer)
+  useEffect(() => {
+    if (auditInfluencerFilter === 'all') setAuditSourceCodeFilter('all');
+  }, [auditInfluencerFilter]);
 
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingLead, setViewingLead] = useState<any>(null);
@@ -152,6 +158,10 @@ export default function AdminDashboardPage() {
         filtered = filtered.filter(l => l.gstCustomer === isGst);
     }
 
+    if (auditCallStatusFilter !== 'all') {
+        filtered = filtered.filter(l => l.callStatus === auditCallStatusFilter);
+    }
+
     if (auditSourceCodeFilter !== 'all') {
         filtered = filtered.filter(l => l.sourceCode === auditSourceCodeFilter);
     }
@@ -178,7 +188,7 @@ export default function AdminDashboardPage() {
     }
 
     return filtered;
-  }, [leads, auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+  }, [leads, auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
 
   const filteredLeads = useMemo(() => {
     if (!dateRange?.from && !dateRange?.to) return leads;
@@ -225,7 +235,7 @@ export default function AdminDashboardPage() {
   const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
   // GST % = (pending leads with GST YES/APPLIED / total pending leads) * 100 — only non-converted
   const isGstLead = (l: { gstStatus?: string; gstCustomer?: boolean; gst?: boolean }) =>
-    l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstCustomer === true || l.gst === true;
+    l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstStatus === 'APPLIED_THROUGH_US' || l.gstCustomer === true || l.gst === true;
   const pendingLeads = filteredLeads.filter(l => !l.converted).length;
   const gstPendingLeads = filteredLeads.filter(l => !l.converted && isGstLead(l)).length;
   const gstPercentage = pendingLeads > 0 ? (gstPendingLeads / pendingLeads) * 100 : 0;
@@ -461,7 +471,7 @@ export default function AdminDashboardPage() {
                     <Button variant="outline" className="h-11 gap-2 border-dashed border-slate-300 px-6 font-bold text-slate-700 bg-white">
                       <Filter className="h-4 w-4" />
                       Auditor Funnel
-                      {(auditStatus !== 'all' || auditRating !== 'all' || auditInfluencerFilter !== 'all' || auditGstFilter !== 'all' || auditMinAmount || auditMaxAmount || auditSourceCodeFilter !== 'all' || auditFollowUpDateFilter || auditSalesPersonFilter !== 'all') && (
+                      {(auditStatus !== 'all' || auditRating !== 'all' || auditInfluencerFilter !== 'all' || auditGstFilter !== 'all' || auditCallStatusFilter !== 'all' || auditMinAmount || auditMaxAmount || auditSourceCodeFilter !== 'all' || auditFollowUpDateFilter || auditSalesPersonFilter !== 'all') && (
                         <Badge variant="secondary" className="ml-1 px-1 h-5 min-w-[1.25rem] bg-blue-100 text-blue-700">
                           !
                         </Badge>
@@ -481,6 +491,7 @@ export default function AdminDashboardPage() {
                             setAuditRating('all');
                             setAuditInfluencerFilter('all');
                             setAuditGstFilter('all');
+                            setAuditCallStatusFilter('all');
                             setAuditMinAmount('');
                             setAuditMaxAmount('');
                             setAuditSourceCodeFilter('all');
@@ -551,6 +562,41 @@ export default function AdminDashboardPage() {
                             </SelectContent>
                           </Select>
                         </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Call Status</Label>
+                          <Select value={auditCallStatusFilter} onValueChange={setAuditCallStatusFilter}>
+                            <SelectTrigger className="h-10 bg-slate-50">
+                              <SelectValue placeholder="Call Status" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white">
+                              <SelectItem value="all">Any Status</SelectItem>
+                              <SelectItem value="CONNECTED">Connected</SelectItem>
+                              <SelectItem value="NOT_CONNECTED">Not Connected</SelectItem>
+                              <SelectItem value="BUSY">Busy</SelectItem>
+                              <SelectItem value="WRONG_NUMBER">Wrong Number</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {auditInfluencerFilter !== 'all' && (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Source Code</Label>
+                            <Select value={auditSourceCodeFilter} onValueChange={setAuditSourceCodeFilter}>
+                              <SelectTrigger className="h-10 bg-slate-50">
+                                <SelectValue placeholder="Source Code" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white">
+                                <SelectItem value="all">All Codes</SelectItem>
+                                {(influencers.find(inf => inf.id === auditInfluencerFilter)?.sourceCodes ?? [])
+                                  .filter((sc: { status?: string }) => sc.status !== 'INACTIVE')
+                                  .map((sc: { code: string }) => (
+                                    <SelectItem key={sc.code} value={sc.code}>{sc.code}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
 
                         <div className="col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Interaction Schedule (Follow-up)</Label>
@@ -771,9 +817,10 @@ export default function AdminDashboardPage() {
                     setAuditSearch('');
                     setAuditStatus('all');
                     setAuditRating('all');
-                    setAuditInfluencerFilter('all');
-                    setAuditGstFilter('all');
-                    setAuditMinAmount('');
+                            setAuditInfluencerFilter('all');
+                            setAuditGstFilter('all');
+                            setAuditCallStatusFilter('all');
+                            setAuditMinAmount('');
                     setAuditMaxAmount('');
                     setAuditSourceCodeFilter('all');
                     setAuditFollowUpDateFilter(undefined);
