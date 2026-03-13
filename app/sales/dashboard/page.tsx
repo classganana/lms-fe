@@ -156,8 +156,14 @@ export default function SalesDashboardPage() {
     }
 
     if (auditGstFilter !== 'all') {
-        const isGst = auditGstFilter === 'yes';
-        filtered = filtered.filter(l => l.gstCustomer === isGst);
+        const status = auditGstFilter;
+        filtered = filtered.filter(l => {
+          const s = (l as { gstStatus?: string }).gstStatus;
+          if (s && ['NO', 'YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(s)) return s === status;
+          if (status === 'APPLIED' || status === 'APPLIED_THROUGH_US') return false;
+          if (status === 'NO') return !l.gstCustomer;
+          return l.gstCustomer === true;
+        });
     }
 
     if (auditCallStatusFilter !== 'all') {
@@ -578,8 +584,10 @@ export default function SalesDashboardPage() {
                             </SelectTrigger>
                             <SelectContent className="bg-white">
                               <SelectItem value="all">Universal GST</SelectItem>
-                              <SelectItem value="yes">GST Enrolled</SelectItem>
-                              <SelectItem value="no">Non-GST</SelectItem>
+                              <SelectItem value="NO">No</SelectItem>
+                              <SelectItem value="YES">Yes</SelectItem>
+                              <SelectItem value="APPLIED">Applied</SelectItem>
+                              <SelectItem value="APPLIED_THROUGH_US">Applied Through Us</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1004,6 +1012,7 @@ export default function SalesDashboardPage() {
               </DialogDescription>
             </DialogHeader>
             <LeadForm 
+              key={editingLead?.id}
               initialMobile={editingLead?.mobile} 
               initialData={editingLead || undefined}
               onSuccess={() => {

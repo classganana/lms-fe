@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useStore } from '@/store';
 import { format } from 'date-fns';
-import { CalendarIcon, Star, CheckCircle } from 'lucide-react';
+import { CalendarIcon, Star, CheckCircle, Loader2 } from 'lucide-react';
 import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api';
@@ -840,19 +840,26 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     </form>
   );
 
-  if (!showCardWrapper) {
+  // Edit case: show loader until lead is fetched and form is populated (influencers ready when needed)
+  const isEditSyncing = Boolean(initialData?.id) && (isLoading || isInitialLoad);
+  if (isEditSyncing) {
+    const editLoader = (
+      <div className="flex flex-col items-center justify-center py-16 gap-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Loading lead details...</p>
+      </div>
+    );
     return (
-      <div className="space-y-6">
-        {formContent}
+      <div className={cn("min-h-[200px]", showCardWrapper && "bg-white rounded-lg")}>
+        {editLoader}
       </div>
     );
   }
 
-  if (isLoading) {
+  if (!showCardWrapper) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-white rounded-lg">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-        <p className="text-muted-foreground font-medium">Fetching latest lead details...</p>
+      <div className="space-y-6">
+        {formContent}
       </div>
     );
   }

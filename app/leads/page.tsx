@@ -77,7 +77,9 @@ function LeadsContent() {
     if (status) setStatusFilter(status);
     if (rating) setRatingFilter(rating);
     if (view === 'today_followup') setShowTodayFollowUp(true);
-    if (gst === 'yes' || gst === 'no') setGstFilter(gst);
+    if (gst && ['yes', 'no', 'YES', 'NO', 'APPLIED', 'APPLIED_THROUGH_US'].includes(gst)) {
+      setGstFilter(gst.toUpperCase() === 'YES' ? 'YES' : gst.toUpperCase() === 'NO' ? 'NO' : gst);
+    }
   }, [searchParams]);
 
   // Reload leads from server when sales executive filter changes
@@ -161,8 +163,18 @@ function LeadsContent() {
     }
 
     if (gstFilter !== 'all') {
-      const isGst = gstFilter === 'yes';
-      filtered = filtered.filter(l => l.gstCustomer === isGst);
+      const status = gstFilter as string;
+      filtered = filtered.filter(l => {
+        const s = (l as { gstStatus?: string }).gstStatus;
+        if (s && ['NO', 'YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(s)) {
+          return s === status;
+        }
+        // APPLIED/APPLIED_THROUGH_US require exact gstStatus match (no backward compat)
+        if (status === 'APPLIED' || status === 'APPLIED_THROUGH_US') return false;
+        // Backward compat for NO/YES: no gstStatus, use gstCustomer
+        if (status === 'NO') return !l.gstCustomer;
+        return l.gstCustomer === true;
+      });
     }
 
     if (callStatusFilter !== 'all') {
@@ -379,8 +391,10 @@ function LeadsContent() {
                       </SelectTrigger>
                       <SelectContent className="bg-white">
                         <SelectItem value="all">Any Status</SelectItem>
-                        <SelectItem value="yes">GST Verified</SelectItem>
-                        <SelectItem value="no">Non-GST</SelectItem>
+                        <SelectItem value="NO">No</SelectItem>
+                        <SelectItem value="YES">Yes</SelectItem>
+                        <SelectItem value="APPLIED">Applied</SelectItem>
+                        <SelectItem value="APPLIED_THROUGH_US">Applied Through Us</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -644,6 +658,7 @@ function LeadsContent() {
               </DialogDescription>
             </DialogHeader>
             <LeadForm 
+              key={editingLead?.id}
               initialMobile={editingLead?.mobile} 
               initialData={editingLead || undefined}
               onSuccess={() => {

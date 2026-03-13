@@ -83,7 +83,7 @@ export default function SalesPage() {
 
   const [influencerFilter, setInfluencerFilter] = useState<string>('all');
   const [salesPersonFilter, setSalesPersonFilter] = useState<string>('all');
-  const [gstFilter, setGstFilter] = useState<boolean | 'all'>('all');
+  const [gstFilter, setGstFilter] = useState<string>('all');
   const [mobileFilter, setMobileFilter] = useState<string>('');
   const [nameFilter, setNameFilter] = useState<string>('');
   const [activeTab, setActiveTab] = useState('sales');
@@ -298,7 +298,15 @@ export default function SalesPage() {
     }
 
     if (gstFilter !== 'all') {
-      filtered = filtered.filter(s => s.gst === gstFilter);
+      const status = gstFilter as string;
+      filtered = filtered.filter(s => {
+        const lead = leads.find(l => l.id === s.leadId);
+        const s2 = (lead as { gstStatus?: string })?.gstStatus;
+        if (s2 && ['NO', 'YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(s2)) return s2 === status;
+        if (status === 'APPLIED' || status === 'APPLIED_THROUGH_US') return false;
+        if (status === 'NO') return !lead?.gstCustomer;
+        return lead?.gstCustomer === true;
+      });
     }
 
     if (mobileFilter) {
@@ -690,18 +698,20 @@ export default function SalesPage() {
                           <Separator />
 
                           <div className="space-y-4">
-                            <div className="flex items-center space-x-2">
-                               <Checkbox 
-                                id="gst-filter" 
-                                checked={gstFilter === true}
-                                onCheckedChange={(c: boolean | 'indeterminate') => {
-                                  if (c === true) setGstFilter(true);
-                                  else if (gstFilter === true) setGstFilter('all');
-                                }}
-                               />
-                               <Label htmlFor="gst-filter" className="font-normal cursor-pointer">
-                                 GST Customer Only
-                               </Label>
+                            <div className="space-y-3">
+                              <Label>GST Status</Label>
+                              <Select value={gstFilter} onValueChange={setGstFilter}>
+                                <SelectTrigger className="bg-white">
+                                  <SelectValue placeholder="All GST" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white">
+                                  <SelectItem value="all">All GST</SelectItem>
+                                  <SelectItem value="NO">No</SelectItem>
+                                  <SelectItem value="YES">Yes</SelectItem>
+                                  <SelectItem value="APPLIED">Applied</SelectItem>
+                                  <SelectItem value="APPLIED_THROUGH_US">Applied Through Us</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
 
                             <div className="flex items-center space-x-2">
@@ -1409,6 +1419,7 @@ export default function SalesPage() {
               </DialogDescription>
             </DialogHeader>
             <LeadForm 
+              key={editingLead?.id}
               initialMobile={editingLead?.mobile} 
               initialData={editingLead || undefined}
               onSuccess={() => {

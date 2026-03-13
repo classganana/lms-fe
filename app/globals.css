@@ -71,6 +71,17 @@
     font-weight: 600;
     letter-spacing: -0.025em;
   }
+
+  /* Pointer cursor for all clickable elements */
+  button,
+  a,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="link"] {
+    cursor: pointer;
+  }
 }
 
 @layer utilities {
@@ -91,6 +102,7 @@
     background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
     border: 1px solid hsl(var(--border));
     transition: all 0.3s ease;
+    cursor: pointer;
   }
   
   .kpi-card:hover {
