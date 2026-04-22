@@ -25,7 +25,7 @@ interface Store {
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
 
-  loadLeads: (opts?: { salesExecutiveId?: string }) => Promise<void>;
+  loadLeads: (opts?: { salesExecutiveId?: string; paymentInfoShared?: 'true' | 'false' }) => Promise<void>;
   loadSales: () => Promise<void>;
   loadInteractions: () => Promise<void>;
   loadInfluencers: () => Promise<void>;
@@ -183,6 +183,9 @@ export const useStore = create<Store>()(
             if (opts?.salesExecutiveId) {
               params.set('salesExecutiveId', opts.salesExecutiveId);
             }
+            if (opts?.paymentInfoShared !== undefined) {
+              params.set('paymentInfoShared', opts.paymentInfoShared);
+            }
             const qs = params.toString();
             if (qs) {
               url += `?${qs}`;
@@ -203,6 +206,11 @@ export const useStore = create<Store>()(
               ...l,
               id: String(l.id || l._id),
               createdBy: toId(l.createdBy) || l.createdBy,
+              conversionDate: l.conversionDate != null ? String(l.conversionDate) : l.conversionDate,
+              paymentInfoShared:
+                l.paymentInfoShared === true ||
+                l.paymentInfoShared === 'true' ||
+                String(l.paymentInfoShared) === 'true',
               gstCustomer: l.gstStatus !== undefined ? (l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstStatus === 'APPLIED_THROUGH_US') :
                 (l.gstCustomer !== undefined ? l.gstCustomer :
                   (l.gst !== undefined ? l.gst : false)),
@@ -231,7 +239,10 @@ export const useStore = create<Store>()(
                 influencerId: item.influencerId || '',
                 amount: Number(item.salesAmount || item.amount || 0),
                 gst: (item.gstStatus === 'YES' || item.gstStatus === 'APPLIED' || item.gstStatus === 'APPLIED_THROUGH_US') || item.gst === true || item.gst === 'true' || item.gstCustomer === true || String(item.gstCustomer) === 'true',
-                saleDate: item.updatedAt || item.createdAt || new Date().toISOString(),
+                // Prefer the true conversion moment; fall back to createdAt so date-range
+                // filters stay stable when a converted lead is later edited (saleDate must
+                // not drift with lead.updatedAt, otherwise revenue windows break).
+                saleDate: item.conversionDate || item.createdAt || item.updatedAt || new Date().toISOString(),
                 createdAt: item.createdAt || new Date().toISOString()
               })) : [];
 
@@ -301,6 +312,7 @@ export const useStore = create<Store>()(
             });
             if (!response.ok) throw new Error('Failed to delete lead');
             await get().loadLeads();
+            await get().loadSales();
           } catch (error) {
             console.error('Delete lead error:', error);
             throw error;

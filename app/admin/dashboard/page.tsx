@@ -43,13 +43,49 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LeadForm } from '@/components/LeadForm';
 import { Lead } from '@/types';
+import {
+  effectiveConversionDate,
+  isConversionInDateRange,
+  isCreatedInDateRange,
+} from '@/lib/lead-reporting';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
+import { API_BASE_URL } from '@/lib/api';
+import { TablePagination, paginateArray } from '@/components/ui/table-pagination';
 
 export default function AdminDashboardPage() {
-  const { leads, sales, influencers, users, dateRange, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
+  const { leads, sales, influencers, users, dateRange, token, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
   const router = useRouter();
+  const [thisMonthRevenue, setThisMonthRevenue] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setThisMonthRevenue(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/admin/dashboard/summary`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && typeof data?.thisMonthRevenue === 'number') {
+          setThisMonthRevenue(data.thisMonthRevenue);
+        }
+      } catch {
+        /* non-blocking KPI */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     loadLeads();
@@ -65,12 +101,15 @@ export default function AdminDashboardPage() {
   const [auditRating, setAuditRating] = useState('all');
   const [auditInfluencerFilter, setAuditInfluencerFilter] = useState('all');
   const [auditGstFilter, setAuditGstFilter] = useState('all');
+  const [auditPaymentInfoFilter, setAuditPaymentInfoFilter] = useState<'all' | 'shared' | 'not_shared'>('all');
   const [auditCallStatusFilter, setAuditCallStatusFilter] = useState('all');
   const [auditMinAmount, setAuditMinAmount] = useState('');
   const [auditMaxAmount, setAuditMaxAmount] = useState('');
   const [auditSourceCodeFilter, setAuditSourceCodeFilter] = useState('all');
   const [auditFollowUpDateFilter, setAuditFollowUpDateFilter] = useState<Date | undefined>(undefined);
   const [auditSalesPersonFilter, setAuditSalesPersonFilter] = useState('all');
+  const [auditPage, setAuditPage] = useState(1);
+  const AUDIT_PAGE_SIZE = 15;
 
   // Refetch leads from backend when auditor strategist filter changes,
   // so this funnel is server-driven for owner selection.
@@ -121,7 +160,7 @@ export default function AdminDashboardPage() {
   };
 
   const getRatingColor = (rating: number | null) => {
-    if (!rating) return 'bg-gray-100 text-gray-600';
+    if (!rating) return 'bg-muted text-muted-foreground';
     if (rating >= 4) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
     if (rating >= 3) return 'bg-amber-100 text-amber-700 border-amber-200';
     return 'bg-rose-100 text-rose-700 border-rose-200';
@@ -132,6 +171,11 @@ export default function AdminDashboardPage() {
     const end = endOfMonth(auditMonth);
     
     let filtered = leads.filter(l => {
+      if (auditStatus === 'converted') {
+        if (!l.converted) return false;
+        const conv = effectiveConversionDate(l, sales);
+        return conv ? isWithinInterval(conv, { start, end }) : false;
+      }
       const d = new Date(l.createdAt);
       return isWithinInterval(d, { start, end });
     });
@@ -164,6 +208,14 @@ export default function AdminDashboardPage() {
         });
     }
 
+    if (auditPaymentInfoFilter !== 'all') {
+      filtered = filtered.filter((l) => {
+        const shared = !!(l as Lead).paymentInfoShared;
+        if (auditPaymentInfoFilter === 'shared') return shared;
+        return !shared;
+      });
+    }
+
     if (auditCallStatusFilter !== 'all') {
         filtered = filtered.filter(l => l.callStatus === auditCallStatusFilter);
     }
@@ -194,25 +246,22 @@ export default function AdminDashboardPage() {
     }
 
     return filtered;
-  }, [leads, auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+  }, [leads, sales, auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditPaymentInfoFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditPaymentInfoFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+
+  const paginatedAuditedLeads = useMemo(
+    () => paginateArray(auditedLeads, auditPage, AUDIT_PAGE_SIZE),
+    [auditedLeads, auditPage]
+  );
 
   const filteredLeads = useMemo(() => {
     if (!dateRange?.from && !dateRange?.to) return leads;
-    return leads.filter(l => {
-      const d = new Date(l.createdAt);
-      d.setHours(0,0,0,0);
-      if (dateRange.from) {
-        const from = new Date(dateRange.from);
-        from.setHours(0,0,0,0);
-        if (d < from) return false;
-      }
-      if (dateRange.to) {
-        const to = new Date(dateRange.to);
-        to.setHours(23,59,59,999);
-        if (d > to) return false;
-      }
-      return true;
-    });
+    return leads.filter(l =>
+      isCreatedInDateRange(l, dateRange.from, dateRange.to),
+    );
   }, [leads, dateRange]);
 
   const filteredSales = useMemo(() => {
@@ -235,7 +284,15 @@ export default function AdminDashboardPage() {
   }, [sales, dateRange]);
 
   const totalLeads = filteredLeads.length;
-  const convertedLeads = filteredLeads.filter(l => l.converted).length;
+  const conversionsInSelectedRange = useMemo(() => {
+    if (!dateRange?.from && !dateRange?.to) {
+      return leads.filter((l) => l.converted).length;
+    }
+    return leads.filter((l) =>
+      isConversionInDateRange(l, sales, dateRange.from, dateRange.to),
+    ).length;
+  }, [leads, sales, dateRange]);
+  const convertedLeads = conversionsInSelectedRange;
   const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
   const totalSales = filteredSales.length;
   const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
@@ -302,7 +359,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">{totalLeads}</div>
-              <p className="text-xs text-slate-400 font-medium tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">System-wide, all sales executives</p>
+              <p className="text-xs text-muted-foreground font-medium tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">System-wide, all sales executives</p>
             </CardContent>
           </Card>
 
@@ -331,7 +388,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">{convertedLeads}</div>
-              <p className="text-xs text-slate-400 font-medium">Successful Conversions</p>
+              <p className="text-xs text-muted-foreground font-medium">Successful Conversions</p>
             </CardContent>
           </Card>
 
@@ -344,7 +401,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">{conversionRate.toFixed(1)}%</div>
-              <p className="text-xs text-slate-400 font-medium">Efficiency tracking</p>
+              <p className="text-xs text-muted-foreground font-medium">Efficiency tracking</p>
             </CardContent>
           </Card>
 
@@ -357,7 +414,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">{totalSales}</div>
-              <p className="text-xs text-slate-400 font-medium">Recorded Transactions</p>
+              <p className="text-xs text-muted-foreground font-medium">Recorded Transactions</p>
             </CardContent>
           </Card>
 
@@ -370,7 +427,26 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">₹{totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-slate-400 font-medium text-ellipsis overflow-hidden">Financial Achievement</p>
+              <p className="text-xs text-muted-foreground font-medium text-ellipsis overflow-hidden">Financial Achievement</p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-teal-500 cursor-pointer shadow-sm"
+            onClick={() => handleCardClick('sales')}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide text-teal-600">
+                This Month Revenue
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-black mb-1 text-teal-700">
+                ₹{(thisMonthRevenue ?? 0).toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">
+                By conversion date · live amounts · excludes deleted leads
+              </p>
             </CardContent>
           </Card>
 
@@ -386,7 +462,7 @@ export default function AdminDashboardPage() {
                 <div className="text-4xl font-black">{gstPercentage.toFixed(1)}%</div>
                 <Badge variant="secondary" className="font-bold">{gstPendingLeads}/{pendingLeads}</Badge>
               </div>
-              <p className="text-xs text-slate-400 font-medium">Pending leads with GST</p>
+              <p className="text-xs text-muted-foreground font-medium">Pending leads with GST</p>
             </CardContent>
           </Card>
 
@@ -399,7 +475,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">{influencers.length}</div>
-              <p className="text-xs text-slate-400 font-medium">Active Partners</p>
+              <p className="text-xs text-muted-foreground font-medium">Active Partners</p>
             </CardContent>
           </Card>
 
@@ -422,23 +498,23 @@ export default function AdminDashboardPage() {
 
         <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
           <DialogContent className="max-w-6xl w-[95vw] h-[90vh] p-0 overflow-hidden flex flex-col border shadow-2xl rounded-xl">
-            <DialogHeader className="p-6 bg-white border-b shrink-0">
+            <DialogHeader className="p-6 bg-card border-b shrink-0">
                <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-lg bg-sky-100 flex items-center justify-center">
                     <LayoutDashboard className="h-6 w-6 text-sky-600" />
                   </div>
                   <div>
-                    <DialogTitle className="text-2xl font-bold text-slate-900">
+                    <DialogTitle className="text-2xl font-bold text-foreground">
                       Monthly Lead Audit - {format(auditMonth, 'MMMM yyyy')}
                     </DialogTitle>
-                    <DialogDescription className="text-slate-500">
+                    <DialogDescription className="text-muted-foreground">
                       Administrative audit stream for monthly registrations
                     </DialogDescription>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border">
+                <div className="flex items-center gap-2 bg-muted/40 p-1 rounded-lg border">
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -447,7 +523,7 @@ export default function AdminDashboardPage() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="px-4 font-bold text-slate-700 min-w-[140px] text-center text-sm">
+                  <div className="px-4 font-bold text-foreground min-w-[140px] text-center text-sm">
                     {format(auditMonth, 'MMM yyyy')}
                   </div>
                   <Button 
@@ -463,10 +539,10 @@ export default function AdminDashboardPage() {
 
               <div className="flex flex-wrap gap-3 items-center">
                 <div className="relative flex-1 min-w-[300px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
                     placeholder="Search by name or mobile..." 
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 font-medium"
+                    className="pl-10 h-11 bg-muted/40 border-border font-medium"
                     value={auditSearch}
                     onChange={(e) => setAuditSearch(e.target.value)}
                   />
@@ -474,20 +550,20 @@ export default function AdminDashboardPage() {
 
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="h-11 gap-2 border-dashed border-slate-300 px-6 font-bold text-slate-700 bg-white">
+                    <Button variant="outline" className="h-11 gap-2 border-dashed border-border px-6 font-bold text-foreground bg-card">
                       <Filter className="h-4 w-4" />
                       Auditor Funnel
-                      {(auditStatus !== 'all' || auditRating !== 'all' || auditInfluencerFilter !== 'all' || auditGstFilter !== 'all' || auditCallStatusFilter !== 'all' || auditMinAmount || auditMaxAmount || auditSourceCodeFilter !== 'all' || auditFollowUpDateFilter || auditSalesPersonFilter !== 'all') && (
+                      {(auditStatus !== 'all' || auditRating !== 'all' || auditInfluencerFilter !== 'all' || auditGstFilter !== 'all' || auditPaymentInfoFilter !== 'all' || auditCallStatusFilter !== 'all' || auditMinAmount || auditMaxAmount || auditSourceCodeFilter !== 'all' || auditFollowUpDateFilter || auditSalesPersonFilter !== 'all') && (
                         <Badge variant="secondary" className="ml-1 px-1 h-5 min-w-[1.25rem] bg-blue-100 text-blue-700">
                           !
                         </Badge>
                       )}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[450px] p-6 bg-white shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[80vh] scrollbar-hide" align="end">
+                  <PopoverContent className="w-[450px] p-6 bg-card shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[80vh] scrollbar-hide" align="end">
                     <div className="space-y-6">
                       <div className="flex items-center justify-between border-b pb-4">
-                        <h4 className="font-black text-slate-900 uppercase tracking-tight text-base">Advance Audit Engine</h4>
+                        <h4 className="font-black text-foreground uppercase tracking-tight text-base">Advance Audit Engine</h4>
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -497,6 +573,7 @@ export default function AdminDashboardPage() {
                             setAuditRating('all');
                             setAuditInfluencerFilter('all');
                             setAuditGstFilter('all');
+                            setAuditPaymentInfoFilter('all');
                             setAuditCallStatusFilter('all');
                             setAuditMinAmount('');
                             setAuditMaxAmount('');
@@ -512,12 +589,12 @@ export default function AdminDashboardPage() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pipeline Status</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Pipeline Status</Label>
                           <Select value={auditStatus} onValueChange={setAuditStatus}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Status" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Global Status</SelectItem>
                               <SelectItem value="converted">Lead Converted</SelectItem>
                               <SelectItem value="pending">Awaiting Audit</SelectItem>
@@ -526,12 +603,12 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Engagement Rating</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Engagement Rating</Label>
                           <Select value={auditRating} onValueChange={setAuditRating}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Rating" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Any Rating</SelectItem>
                               {[5,4,3,2,1].map(r => (
                                 <SelectItem key={r} value={String(r)}>{r} Star Ranking</SelectItem>
@@ -541,12 +618,12 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Influencer Source</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Influencer Source</Label>
                           <Select value={auditInfluencerFilter} onValueChange={setAuditInfluencerFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Select Influencer" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">All Channels</SelectItem>
                               {influencers.map(inf => (
                                 <SelectItem key={inf.id} value={inf.id}>{inf.name}</SelectItem>
@@ -556,12 +633,12 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GST Recognition</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">GST Recognition</Label>
                           <Select value={auditGstFilter} onValueChange={setAuditGstFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="GST Mode" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Universal GST</SelectItem>
                               <SelectItem value="NO">No</SelectItem>
                               <SelectItem value="YES">Yes</SelectItem>
@@ -572,12 +649,29 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Call Status</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Payment info shared</Label>
+                          <Select
+                            value={auditPaymentInfoFilter}
+                            onValueChange={(v) => setAuditPaymentInfoFilter(v as 'all' | 'shared' | 'not_shared')}
+                          >
+                            <SelectTrigger className="h-10 bg-muted/40">
+                              <SelectValue placeholder="All" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card">
+                              <SelectItem value="all">All</SelectItem>
+                              <SelectItem value="shared">Shared</SelectItem>
+                              <SelectItem value="not_shared">Not shared</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Call Status</Label>
                           <Select value={auditCallStatusFilter} onValueChange={setAuditCallStatusFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Call Status" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Any Status</SelectItem>
                               <SelectItem value="CONNECTED">Connected</SelectItem>
                               <SelectItem value="NOT_CONNECTED">Not Connected</SelectItem>
@@ -589,12 +683,12 @@ export default function AdminDashboardPage() {
 
                         {auditInfluencerFilter !== 'all' && (
                           <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Source Code</Label>
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Source Code</Label>
                             <Select value={auditSourceCodeFilter} onValueChange={setAuditSourceCodeFilter}>
-                              <SelectTrigger className="h-10 bg-slate-50">
+                              <SelectTrigger className="h-10 bg-muted/40">
                                 <SelectValue placeholder="Source Code" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white">
+                              <SelectContent className="bg-card">
                                 <SelectItem value="all">All Codes</SelectItem>
                                 {(influencers.find(inf => inf.id === auditInfluencerFilter)?.sourceCodes ?? [])
                                   .filter((sc: { status?: string }) => sc.status !== 'INACTIVE')
@@ -607,15 +701,15 @@ export default function AdminDashboardPage() {
                         )}
 
                         <div className="col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Interaction Schedule (Follow-up)</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Interaction Schedule (Follow-up)</Label>
                           <Popover>
                             <PopoverTrigger asChild>
-                              <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-slate-50", !auditFollowUpDateFilter && "text-muted-foreground")}>
+                              <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-muted/40", !auditFollowUpDateFilter && "text-muted-foreground")}>
                                 <CalendarIcon className="mr-2 h-4 w-4 text-blue-600" />
                                 {auditFollowUpDateFilter ? format(auditFollowUpDateFilter, 'PPPP') : 'Target a date'}
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 bg-white" align="start">
+                            <PopoverContent className="w-auto p-0 bg-card" align="start">
                               <Calendar
                                 mode="single"
                                 selected={auditFollowUpDateFilter}
@@ -627,34 +721,34 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Min)</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Investment (Min)</Label>
                           <Input 
                             type="number" 
                             placeholder="Min ₹" 
-                            className="h-10 bg-slate-50"
+                            className="h-10 bg-muted/40"
                             value={auditMinAmount}
                             onChange={(e) => setAuditMinAmount(e.target.value)}
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Max)</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Investment (Max)</Label>
                           <Input 
                             type="number" 
                             placeholder="Max ₹" 
-                            className="h-10 bg-slate-50"
+                            className="h-10 bg-muted/40"
                             value={auditMaxAmount}
                             onChange={(e) => setAuditMaxAmount(e.target.value)}
                           />
                         </div>
 
                         <div className="col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Employee</Label>
                           <Select value={auditSalesPersonFilter} onValueChange={setAuditSalesPersonFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">All Employees</SelectItem>
                               {users.filter(u => u.role === 'NON_ADMIN').map(u => (
                                 <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
@@ -669,7 +763,7 @@ export default function AdminDashboardPage() {
               </div>
             </DialogHeader>
 
-            <div className="flex-1 overflow-auto p-0 bg-white">
+            <div className="flex-1 overflow-auto p-0 bg-card">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 h-10 hover:bg-transparent">
@@ -686,31 +780,31 @@ export default function AdminDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {auditedLeads.length > 0 ? auditedLeads.map((lead) => (
-                    <TableRow key={lead.id} className="h-12 hover:bg-slate-50 transition-colors cursor-pointer border-b">
+                  {auditedLeads.length > 0 ? paginatedAuditedLeads.map((lead) => (
+                    <TableRow key={lead.id} className="h-12 hover:bg-muted/40 transition-colors cursor-pointer border-b">
                        <TableCell
-                        className="pl-6 text-sm font-medium text-slate-600"
+                        className="pl-6 text-sm font-medium text-muted-foreground"
                         onClick={() => {
                           setViewingLead(lead);
                           setIsViewDialogOpen(true);
                         }}
                        >{users.find(u => u.id === lead.createdBy)?.name || '—'}</TableCell>
                        <TableCell 
-                        className="font-bold text-sm text-slate-900"
+                        className="font-bold text-sm text-foreground"
                         onClick={() => {
                           setViewingLead(lead);
                           setIsViewDialogOpen(true);
                         }}
                        >{lead.name}</TableCell>
                        <TableCell 
-                        className="font-mono text-sm font-bold text-slate-600"
+                        className="font-mono text-sm font-bold text-muted-foreground"
                         onClick={() => {
                           setViewingLead(lead);
                           setIsViewDialogOpen(true);
                         }}
                        >{lead.mobile}</TableCell>
                         <TableCell
-                         className="text-sm text-slate-500 font-medium"
+                         className="text-sm text-muted-foreground font-medium"
                          onClick={() => {
                            setViewingLead(lead);
                            setIsViewDialogOpen(true);
@@ -727,7 +821,7 @@ export default function AdminDashboardPage() {
                               YES
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-slate-400 font-medium h-6 shadow-none">
+                            <Badge variant="outline" className="text-muted-foreground font-medium h-6 shadow-none">
                               NO
                             </Badge>
                           )}
@@ -770,7 +864,7 @@ export default function AdminDashboardPage() {
                         }}
                        >
                          <div className="flex flex-col items-end">
-                           <span className="text-sm font-bold text-slate-700">{format(new Date(lead.createdAt), 'MMM dd, yyyy')}</span>
+                           <span className="text-sm font-bold text-foreground">{format(new Date(lead.createdAt), 'MMM dd, yyyy')}</span>
                            <span className="text-[10px] text-muted-foreground uppercase font-bold">{format(new Date(lead.createdAt), 'hh:mm a')}</span>
                          </div>
                        </TableCell>
@@ -779,7 +873,7 @@ export default function AdminDashboardPage() {
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-blue-600 hover:bg-blue-50"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditClick(lead);
@@ -791,7 +885,7 @@ export default function AdminDashboardPage() {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleDeleteClick(lead.id);
@@ -812,21 +906,32 @@ export default function AdminDashboardPage() {
                   )}
                 </TableBody>
               </Table>
+
+              <div className="px-6 pb-4">
+                <TablePagination
+                  page={auditPage}
+                  pageSize={AUDIT_PAGE_SIZE}
+                  totalItems={auditedLeads.length}
+                  onPageChange={setAuditPage}
+                  itemLabel="leads"
+                />
+              </div>
             </div>
 
-            <div className="p-6 border-t bg-slate-50 flex justify-between items-center shrink-0">
-               <div className="flex items-center gap-4 text-xs font-black text-slate-400 uppercase tracking-widest">
-                 <span>Lead Volume: <span className="text-slate-900">{auditedLeads.length}</span></span>
+            <div className="p-6 border-t bg-muted/40 flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-4 text-xs font-black text-muted-foreground uppercase tracking-widest">
+                 <span>Lead Volume: <span className="text-foreground">{auditedLeads.length}</span></span>
                  <div className="w-px h-4 bg-slate-300" />
                  <span>Audit Converted: <span className="text-emerald-600">{auditedLeads.filter(l => l.converted).length}</span></span>
                </div>
                <div className="flex gap-3">
-                 <Button variant="outline" className="font-bold border-slate-300 text-slate-600" onClick={() => {
+                 <Button variant="outline" className="font-bold border-border text-muted-foreground" onClick={() => {
                     setAuditSearch('');
                     setAuditStatus('all');
                     setAuditRating('all');
                             setAuditInfluencerFilter('all');
                             setAuditGstFilter('all');
+                            setAuditPaymentInfoFilter('all');
                             setAuditCallStatusFilter('all');
                             setAuditMinAmount('');
                     setAuditMaxAmount('');
@@ -850,10 +955,10 @@ export default function AdminDashboardPage() {
 
         {/* View Lead Details Dialog */}
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-          <DialogContent className="max-w-4xl bg-white rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
+          <DialogContent className="max-w-4xl bg-card rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-8 bg-gradient-to-r from-blue-700 to-indigo-800 text-white shrink-0">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                <div className="w-16 h-16 rounded-2xl bg-card/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
                   <User className="h-8 w-8 text-white" />
                 </div>
                 <div>
@@ -866,33 +971,33 @@ export default function AdminDashboardPage() {
             <div className="p-8 space-y-8 max-h-[60vh] overflow-y-auto no-scrollbar">
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact Primary</p>
-                  <p className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Contact Primary</p>
+                  <p className="text-base font-black text-foreground flex items-center gap-2">
                     <Phone className="h-4 w-4 text-blue-600" />
                     {viewingLead?.mobile}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Identity</p>
-                  <p className="text-base font-black text-slate-900">{viewingLead?.email || 'N/A'}</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Email Identity</p>
+                  <p className="text-base font-black text-foreground">{viewingLead?.email || 'N/A'}</p>
                 </div>
               </div>
 
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-6">
+              <div className="p-5 bg-muted/40 rounded-2xl border border-border grid grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Regional Zone</p>
-                  <p className="text-sm font-black text-slate-700 flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-slate-400" />
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Regional Zone</p>
+                  <p className="text-sm font-black text-foreground flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
                     {viewingLead?.state}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Locale City</p>
-                  <p className="text-sm font-black text-slate-700">{viewingLead?.city || 'N/A'}</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Locale City</p>
+                  <p className="text-sm font-black text-foreground">{viewingLead?.city || 'N/A'}</p>
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Geographic coordinates (Address)</p>
-                  <p className="text-sm font-bold text-slate-500 leading-relaxed italic">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Geographic coordinates (Address)</p>
+                  <p className="text-sm font-bold text-muted-foreground leading-relaxed italic">
                     {viewingLead?.address || 'No address provided'}
                     {viewingLead?.pincode ? ` - ${viewingLead.pincode}` : ''}
                   </p>
@@ -901,21 +1006,21 @@ export default function AdminDashboardPage() {
 
               <div className="grid grid-cols-2 gap-6">
                  <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Operational Status</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Operational Status</p>
                   {viewingLead?.converted ? (
                     <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 px-4 py-1.5 rounded-lg font-black shadow-sm">
                       <CheckCircle className="h-4 w-4 mr-2" />
                       SYSTEM CONVERTED
                     </Badge>
                   ) : (
-                    <Badge className="bg-slate-100 text-slate-600 border-slate-200 px-4 py-1.5 rounded-lg font-black shadow-none uppercase">
-                      <Clock className="h-4 w-4 mr-2 text-slate-400" />
+                    <Badge className="bg-muted text-muted-foreground border-border px-4 py-1.5 rounded-lg font-black shadow-none uppercase">
+                      <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
                       Pending Review
                     </Badge>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Engagement Ranking</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Engagement Ranking</p>
                   <Badge className={cn("px-4 py-1.5 rounded-lg border-0 shadow-lg font-black", getRatingColor(viewingLead?.rating || null))}>
                     <Star className="h-4 w-4 mr-2 fill-current" />
                     {viewingLead?.rating ? `${viewingLead.rating}.0 / 5.0 Precision` : 'NOT RANKED'}
@@ -923,34 +1028,39 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+              <div className="space-y-1 pt-2 border-t border-border">
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Payment information shared</p>
+                <p className="text-sm font-black text-foreground">{viewingLead?.paymentInfoShared ? 'Yes' : 'No'}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-border">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Interaction Plan</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Next Interaction Plan</p>
                   <p className="text-sm font-black text-blue-600 flex items-center gap-2">
                     <LucideCalendar className="h-4 w-4" />
                     {viewingLead?.followUpDate ? format(new Date(viewingLead.followUpDate), 'MMMM dd, yyyy') : 'No follow-up scheduled'}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Ingestion Stamp</p>
-                  <p className="text-sm font-black text-slate-700 uppercase tracking-tighter">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Data Ingestion Stamp</p>
+                  <p className="text-sm font-black text-foreground uppercase tracking-tighter">
                     {viewingLead?.createdAt ? format(new Date(viewingLead.createdAt), 'MMM dd, yyyy') : 'N/A'}
                   </p>
                 </div>
               </div>
 
               {viewingLead?.notes && (
-                <div className="space-y-3 pt-6 border-t border-slate-100">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Administrative Intelligence Notes</p>
-                  <div className="p-4 bg-blue-50/30 border border-blue-100 rounded-2xl text-sm text-slate-700 font-bold leading-relaxed italic shadow-inner">
+                <div className="space-y-3 pt-6 border-t border-border">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Administrative Intelligence Notes</p>
+                  <div className="p-4 bg-blue-50/30 border border-blue-100 rounded-2xl text-sm text-foreground font-bold leading-relaxed italic shadow-inner">
                     "{viewingLead.notes}"
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="p-8 border-t bg-slate-50 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-black text-slate-500 bg-white border-slate-200 uppercase tracking-wider text-xs">
+            <div className="p-8 border-t bg-muted/40 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-black text-muted-foreground bg-card border-border uppercase tracking-wider text-xs">
                 Close Profile
               </Button>
               <Button 
@@ -969,10 +1079,10 @@ export default function AdminDashboardPage() {
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent className="sm:max-w-[425px] bg-white">
+          <DialogContent className="sm:max-w-[425px] bg-card">
             <DialogHeader>
               <DialogTitle className="text-xl font-black text-red-600 uppercase tracking-tighter">System Deletion</DialogTitle>
-              <DialogDescription className="font-bold text-slate-500">
+              <DialogDescription className="font-bold text-muted-foreground">
                 Are you absolutely sure you want to purge this lead? This operation is irreversible.
               </DialogDescription>
             </DialogHeader>
@@ -989,10 +1099,10 @@ export default function AdminDashboardPage() {
 
         {/* Edit Lead Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-white scrollbar-hide">
+          <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-card scrollbar-hide">
             <DialogHeader>
               <DialogTitle className="text-2xl font-black uppercase tracking-tighter">Modify Lead Node</DialogTitle>
-              <DialogDescription className="font-bold text-slate-400 uppercase text-xs tracking-widest">
+              <DialogDescription className="font-bold text-muted-foreground uppercase text-xs tracking-widest">
                 Update operational parameters for the selected lead entity.
               </DialogDescription>
             </DialogHeader>

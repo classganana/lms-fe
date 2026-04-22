@@ -142,13 +142,13 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
 
   return (
     <>
-     <Card className="border-0 shadow-xl ring-1 ring-slate-200/50 bg-white h-full overflow-hidden flex flex-col">
-        <CardHeader className="border-b bg-slate-50/80 backdrop-blur-sm py-5 px-6 flex flex-row items-center justify-between sticky top-0 z-10">
+     <Card className="border border-border shadow-xl ring-1 ring-border/50 bg-card h-full overflow-hidden flex flex-col">
+        <CardHeader className="border-b border-border bg-muted/40 backdrop-blur-sm py-5 px-6 flex flex-row items-center justify-between sticky top-0 z-10">
             <div className="space-y-1">
-                <CardTitle className="text-xl font-bold text-slate-800">Team Directory</CardTitle>
+                <CardTitle className="text-xl font-bold text-foreground">Team Directory</CardTitle>
                 <CardDescription>View and manage {employees.length} active registered users</CardDescription>
             </div>
-            <Badge variant="outline" className="px-3 py-1 bg-white shadow-sm border-slate-200 text-slate-700">
+            <Badge variant="outline" className="px-3 py-1 bg-card shadow-sm border-border text-foreground">
                 {employees.length} Total Users
             </Badge>
         </CardHeader>
@@ -156,12 +156,12 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
             <div className="overflow-x-auto">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                            <TableHead className="w-[30%] pl-6 py-4 font-semibold text-slate-600">Employee Details</TableHead>
-                            <TableHead className="w-[25%] font-semibold text-slate-600">Contact</TableHead>
-                            <TableHead className="w-[15%] font-semibold text-slate-600">Role</TableHead>
-                            <TableHead className="w-[15%] font-semibold text-slate-600">Status</TableHead>
-                            <TableHead className="text-right w-[15%] pr-6 font-semibold text-slate-600">Actions</TableHead>
+                        <TableRow className="bg-muted/40 hover:bg-muted/40">
+                            <TableHead className="w-[30%] pl-6 py-4 font-semibold text-muted-foreground">Employee Details</TableHead>
+                            <TableHead className="w-[25%] font-semibold text-muted-foreground">Contact</TableHead>
+                            <TableHead className="w-[15%] font-semibold text-muted-foreground">Role</TableHead>
+                            <TableHead className="w-[15%] font-semibold text-muted-foreground">Status</TableHead>
+                            <TableHead className="text-right w-[15%] pr-6 font-semibold text-muted-foreground">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -169,7 +169,7 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
                             [1,2,3].map((i) => (
                                 <TableRow key={i}>
                                     <TableCell colSpan={5} className="h-16 px-6">
-                                       <div className="h-4 bg-slate-100 rounded animate-pulse w-full"></div> 
+                                       <div className="h-4 bg-muted rounded animate-pulse w-full"></div>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -177,76 +177,72 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
                             <TableRow>
                                 <TableCell colSpan={5} className="h-64 text-center text-muted-foreground">
                                     <div className="flex flex-col items-center justify-center p-6">
-                                        <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                            <Users className="h-8 w-8 text-slate-300" />
+                                        <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                                            <Users className="h-8 w-8 text-muted-foreground" />
                                         </div>
-                                        <p className="text-lg font-medium text-slate-900">No employees found</p>
-                                        <p className="text-sm text-slate-500 max-w-xs mt-1">Get started by adding a new sales executive via the form on the left.</p>
+                                        <p className="text-lg font-medium text-foreground">No employees found</p>
+                                        <p className="text-sm text-muted-foreground max-w-xs mt-1">Get started by adding a new sales executive via the form on the left.</p>
                                     </div>
                                 </TableCell>
                             </TableRow>
                         ) : (
                             employees.map((employee: any) => (
-                                <TableRow key={employee.id || employee._id} className="hover:bg-slate-50/80 transition-colors group">
+                                <TableRow key={employee.id || employee._id} className="hover:bg-muted/40 transition-colors group">
                                     <TableCell className="pl-6 py-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-white font-bold shadow-sm">
+                                            <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold shadow-sm">
                                                 {employee.name.charAt(0).toUpperCase()}
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="font-semibold text-slate-900">{employee.name}</span>
+                                                <span className="font-semibold text-foreground">{employee.name}</span>
                                                 <span className="text-xs text-muted-foreground lg:hidden">{employee.email}</span>
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-2 text-sm text-slate-600">
-                                                <Mail className="h-3.5 w-3.5 text-slate-400" />
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                                                 {employee.email}
                                             </div>
-                                            <div className="flex items-center gap-2 text-sm text-slate-600">
-                                                <Smartphone className="h-3.5 w-3.5 text-slate-400" />
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />
                                                 {employee.mobile || 'N/A'}
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge 
-                                            variant={employee.role === 'ADMIN' ? 'default' : 'secondary'} 
-                                            className={`px-2.5 py-0.5 text-xs font-semibold tracking-wide ${
-                                                employee.role === 'ADMIN' 
-                                                ? 'bg-slate-400 hover:bg-slate-500' 
-                                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-transparent'
-                                            }`}
+                                        <Badge
+                                            variant={employee.role === 'ADMIN' ? 'default' : 'soft-info'}
+                                            className="px-2.5 py-0.5 text-xs font-semibold tracking-wide"
                                         >
                                             {employee.role}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-1.5">
-                                            <div className={`h-2 w-2 rounded-full ${employee.isActive ? 'bg-green-500' : 'bg-red-500'}`} />
-                                            <span className="text-sm font-medium text-slate-600">
+                                            <div className={`h-2 w-2 rounded-full ${employee.isActive ? 'bg-success' : 'bg-destructive'}`} />
+                                            <span className="text-sm font-medium text-muted-foreground">
                                                 {employee.isActive ? 'Active' : 'Inactive'}
                                             </span>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right pr-6">
                                         <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-8 w-8 text-slate-500 bg-blue-600 text-white hover:bg-blue-350 rounded-lg"
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 bg-info text-info-foreground hover:bg-info/85 rounded-lg"
                                                 onClick={() => openEditDialog(employee)}
                                                 title="Edit Employee"
                                             >
                                                 <Pencil className="h-4 w-4" />
                                             </Button>
                                             {employee.role !== 'ADMIN' && (
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon" 
-                                                    className="h-8 w-8 text-slate-500 bg-red-500 text-white hover:bg-red-350 rounded-lg"
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 bg-destructive text-destructive-foreground hover:bg-destructive/85 rounded-lg"
                                                     onClick={() => handleDelete(employee.id || employee._id)}
                                                     title="Delete Employee"
                                                 >
@@ -266,19 +262,19 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
 
      {/* Edit Modal */}
      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-0 shadow-2xl">
-        <DialogHeader className="border-b pb-4">
-            <DialogTitle className="flex items-center gap-2 text-xl">
-                <Shield className="h-5 w-5 text-blue-600" />
+        <DialogContent className="sm:max-w-md bg-card border border-border shadow-2xl">
+        <DialogHeader className="border-b border-border pb-4">
+            <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
+                <Shield className="h-5 w-5 text-info" />
                 Edit Employee Details
             </DialogTitle>
             <DialogDescription>
-                Update account information for <span className="font-semibold text-slate-900">{currentEmployee?.name}</span>
+                Update account information for <span className="font-semibold text-foreground">{currentEmployee?.name}</span>
             </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
             <div className="space-y-2">
-                <Label htmlFor="edit-name" className="text-slate-600">
+                <Label htmlFor="edit-name" className="text-muted-foreground">
                     Full Name
                 </Label>
                 <div className="relative">
@@ -288,11 +284,11 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
                         onChange={(e) => setEditFormData(prev => ({...prev, name: e.target.value}))}
                         className="pl-9"
                     />
-                    <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 </div>
             </div>
             <div className="space-y-2">
-                <Label htmlFor="edit-email" className="text-slate-600">
+                <Label htmlFor="edit-email" className="text-muted-foreground">
                     Email Address
                 </Label>
                 <div className="relative">
@@ -302,11 +298,11 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
                         onChange={(e) => setEditFormData(prev => ({...prev, email: e.target.value}))}
                         className="pl-9"
                     />
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 </div>
             </div>
             <div className="space-y-2">
-                <Label htmlFor="edit-mobile" className="text-slate-600">
+                <Label htmlFor="edit-mobile" className="text-muted-foreground">
                     Mobile Number
                 </Label>
                 <div className="relative">
@@ -316,28 +312,28 @@ export function EmployeeList({ employees, loading, onRefresh }: EmployeeListProp
                         onChange={(e) => setEditFormData(prev => ({...prev, mobile: e.target.value}))}
                         className="pl-9"
                     />
-                    <Smartphone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Smartphone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 </div>
             </div>
             <div className="space-y-2">
-                <Label htmlFor="edit-password" className="text-slate-600">
+                <Label htmlFor="edit-password" className="text-muted-foreground">
                     Reset Password
                 </Label>
                 <div className="relative">
                     <Input
                         id="edit-password"
-                        type="text" 
+                        type="text"
                         placeholder="Enter new password (optional)"
                         value={editFormData.password}
                         onChange={(e) => setEditFormData(prev => ({...prev, password: e.target.value}))}
                         className="pl-9"
                     />
-                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 </div>
                 <p className="text-xs text-muted-foreground ml-1">Leave blank to keep current password.</p>
             </div>
         </div>
-        <DialogFooter className="border-t pt-4">
+        <DialogFooter className="border-t border-border pt-4">
             <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleEditSubmit} disabled={updating} className="gradient-primary">
                 {updating ? 'Saving Changes...' : 'Save Changes'}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,6 +12,7 @@ import { useStore } from '@/store';
 import { API_BASE_URL } from '@/lib/api';
 import { format } from 'date-fns';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { TablePagination, paginateArray } from '@/components/ui/table-pagination';
 
 export default function AdminInfluencersPage() {
   const [selectedInfluencer, setSelectedInfluencer] = useState<string | null>(null);
@@ -28,6 +29,9 @@ export default function AdminInfluencersPage() {
   const [editName, setEditName] = useState('');
 
   const { influencers, addSourceCode, addInfluencer, updateInfluencer, deleteInfluencer, loadInfluencers, updateSourceCodeStatus, deleteSourceCode, token } = useStore();
+
+  const [influencerPage, setInfluencerPage] = useState(1);
+  const INFLUENCER_PAGE_SIZE = 8;
 
   useEffect(() => {
     loadInfluencers();
@@ -123,10 +127,23 @@ export default function AdminInfluencersPage() {
   // Debug: Log influencers to check data structure
   console.log('Current Influencers State:', influencers);
 
-  const activeInfluencers = influencers.map(inf => ({
-    ...inf,
-    sourceCodes: inf.sourceCodes?.filter(sc => sc.status === 'ACTIVE') || [],
-  }));
+  const activeInfluencers = useMemo(
+    () => influencers.map(inf => ({
+      ...inf,
+      sourceCodes: inf.sourceCodes?.filter(sc => sc.status === 'ACTIVE') || [],
+    })),
+    [influencers]
+  );
+
+  const paginatedInfluencers = useMemo(
+    () => paginateArray(activeInfluencers, influencerPage, INFLUENCER_PAGE_SIZE),
+    [activeInfluencers, influencerPage]
+  );
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(activeInfluencers.length / INFLUENCER_PAGE_SIZE));
+    if (influencerPage > totalPages) setInfluencerPage(totalPages);
+  }, [activeInfluencers.length, influencerPage]);
 
   return (
     <MainLayout>
@@ -141,12 +158,12 @@ export default function AdminInfluencersPage() {
 
           <Dialog open={addInfluencerOpen} onOpenChange={setAddInfluencerOpen}>
             <DialogTrigger asChild>
-              <Button size="lg" className="bg-blue-600 hover:from-blue-700 hover:to-purple-700 shadow-lg shadow-blue-200">
+              <Button size="lg" className="gradient-primary shadow-lg">
                 <Plus className="mr-2 h-5 w-5" />
                 Add Influencer
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-white">
+            <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Influencer</DialogTitle>
                 <DialogDescription>
@@ -177,20 +194,20 @@ export default function AdminInfluencersPage() {
 
         <div className="grid grid-cols-1 gap-6">
           {activeInfluencers.length > 0 ? (
-            activeInfluencers.map((influencer) => {
+            paginatedInfluencers.map((influencer) => {
               const fullInfluencer = influencers.find(i => i.id === influencer.id);
               const historySourceCodes = fullInfluencer?.sourceCodes ?? [];
 
               return (
-              <Card key={influencer.id} className="shadow-lg border-0">
-                <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
+              <Card key={influencer.id} className="shadow-lg border border-border bg-card">
+                <CardHeader className="border-b border-border bg-muted/40">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-semibold">{influencer.name}</CardTitle>
+                    <CardTitle className="text-xl font-semibold text-foreground">{influencer.name}</CardTitle>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        className="text-info hover:text-info hover:bg-info-soft"
                         onClick={() => {
                           setEditingInfluencer({ id: influencer.id, name: influencer.name });
                           setEditName(influencer.name);
@@ -202,12 +219,12 @@ export default function AdminInfluencersPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="text-destructive hover:text-destructive hover:bg-danger-soft"
                         onClick={() => handleDeleteInfluencer(influencer.id, influencer.name)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                      <div className="w-px h-6 bg-slate-200 mx-1" />
+                      <div className="w-px h-6 bg-border mx-1" />
                       <Dialog open={dialogOpen && selectedInfluencer === influencer.id} onOpenChange={(open) => {
                         setDialogOpen(open);
                         if (!open) {
@@ -228,7 +245,7 @@ export default function AdminInfluencersPage() {
                             Add Source Code
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="bg-white">
+                        <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Add Source Code</DialogTitle>
                             <DialogDescription>
@@ -337,16 +354,24 @@ export default function AdminInfluencersPage() {
               </Card>
             )})
           ) : (
-             <div className="text-center py-12 bg-white rounded-lg shadow border border-dashed">
-                <h3 className="text-lg font-medium text-slate-900">No influencers found</h3>
+             <div className="text-center py-12 bg-card rounded-lg shadow border border-dashed border-border">
+                <h3 className="text-lg font-medium text-foreground">No influencers found</h3>
                 <p className="text-muted-foreground mt-1">Get started by adding a new influencer.</p>
              </div>
           )}
         </div>
 
+        <TablePagination
+          page={influencerPage}
+          pageSize={INFLUENCER_PAGE_SIZE}
+          totalItems={activeInfluencers.length}
+          onPageChange={setInfluencerPage}
+          itemLabel="influencers"
+        />
+
         {/* Edit Influencer Dialog */}
         <Dialog open={editInfluencerOpen} onOpenChange={setEditInfluencerOpen}>
-          <DialogContent className="bg-white">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Influencer</DialogTitle>
               <DialogDescription>

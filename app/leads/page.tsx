@@ -20,6 +20,7 @@ import { LeadForm } from '@/components/LeadForm';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
+import { TablePagination, paginateArray } from '@/components/ui/table-pagination';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,7 @@ function LeadsContent() {
   
   const [influencerFilter, setInfluencerFilter] = useState('all');
   const [gstFilter, setGstFilter] = useState('all');
+  const [paymentInfoFilter, setPaymentInfoFilter] = useState<'all' | 'shared' | 'not_shared'>('all');
   const [callStatusFilter, setCallStatusFilter] = useState<string>('all');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
@@ -66,6 +68,9 @@ function LeadsContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+
+  const [leadsPage, setLeadsPage] = useState(1);
+  const LEADS_PAGE_SIZE = 25;
 
   // Initialize filters from URL params
   useEffect(() => {
@@ -177,6 +182,14 @@ function LeadsContent() {
       });
     }
 
+    if (paymentInfoFilter !== 'all') {
+      filtered = filtered.filter((l) => {
+        const shared = !!l.paymentInfoShared;
+        if (paymentInfoFilter === 'shared') return shared;
+        return !shared;
+      });
+    }
+
     if (callStatusFilter !== 'all') {
       filtered = filtered.filter(l => l.callStatus === callStatusFilter);
     }
@@ -207,7 +220,17 @@ function LeadsContent() {
     }
 
     return filtered;
-  }, [leads, dateRange, statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp, influencerFilter, gstFilter, callStatusFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, salesPersonFilter]);
+  }, [leads, dateRange, statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp, influencerFilter, gstFilter, paymentInfoFilter, callStatusFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, salesPersonFilter]);
+
+  // Reset pagination whenever the filtered set changes (filter, search, date, etc.).
+  useEffect(() => {
+    setLeadsPage(1);
+  }, [statusFilter, ratingFilter, nameFilter, mobileFilter, showTodayFollowUp, influencerFilter, gstFilter, paymentInfoFilter, callStatusFilter, minAmount, maxAmount, sourceCodeFilter, followUpDateFilter, salesPersonFilter, dateRange]);
+
+  const paginatedLeads = useMemo(
+    () => paginateArray(filteredLeads, leadsPage, LEADS_PAGE_SIZE),
+    [filteredLeads, leadsPage]
+  );
 
   const handleEditClick = (lead: Lead) => {
     setEditingLead(lead);
@@ -237,7 +260,7 @@ function LeadsContent() {
   };
 
   const getRatingColor = (rating: number | null) => {
-    if (!rating) return 'bg-gray-100 text-gray-600';
+    if (!rating) return 'bg-muted text-muted-foreground';
     if (rating >= 4) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
     if (rating >= 3) return 'bg-amber-100 text-amber-700 border-amber-200';
     return 'bg-rose-100 text-rose-700 border-rose-200';
@@ -257,8 +280,8 @@ function LeadsContent() {
           </div>
         </div>
 
-        <Card className="shadow-lg border-0 bg-white">
-          <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
+        <Card className="shadow-lg border-0 bg-card">
+          <CardHeader className="border-b bg-muted/40">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-xl font-semibold">Leads Directory</CardTitle>
@@ -272,10 +295,10 @@ function LeadsContent() {
           <CardContent className="p-6">
             <div className="flex flex-wrap gap-3 items-center">
             <div className="relative flex-1 min-w-[300px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search leads with phone and name..." 
-                className="pl-10 h-11 bg-white border-slate-200"
+                className="pl-10 h-11 bg-card border-border"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
               />
@@ -283,20 +306,20 @@ function LeadsContent() {
 
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="h-11 gap-2 border-dashed border-slate-300 px-6 font-bold text-slate-700 bg-white">
+                <Button variant="outline" className="h-11 gap-2 border-dashed border-border px-6 font-bold text-foreground bg-card">
                   <Filter className="h-4 w-4" />
                   Leads Funnel
-                  {(statusFilter !== 'all' || ratingFilter !== 'all' || influencerFilter !== 'all' || gstFilter !== 'all' || callStatusFilter !== 'all' || minAmount || maxAmount || sourceCodeFilter !== 'all' || followUpDateFilter || salesPersonFilter !== 'all') && (
+                  {(statusFilter !== 'all' || ratingFilter !== 'all' || influencerFilter !== 'all' || gstFilter !== 'all' || paymentInfoFilter !== 'all' || callStatusFilter !== 'all' || minAmount || maxAmount || sourceCodeFilter !== 'all' || followUpDateFilter || salesPersonFilter !== 'all') && (
                     <Badge variant="secondary" className="ml-1 px-1 h-5 min-w-[1.25rem] bg-blue-100 text-blue-700">
                       !
                     </Badge>
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[95vw] md:w-[800px] p-8 bg-white shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[60vh] scrollbar-hide" align="end">
+              <PopoverContent className="w-[95vw] md:w-[800px] p-8 bg-card shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[60vh] scrollbar-hide" align="end">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between border-b pb-4">
-                    <h4 className="font-black text-slate-900 uppercase tracking-tight text-base">Leads Search Engine</h4>
+                    <h4 className="font-black text-foreground uppercase tracking-tight text-base">Leads Search Engine</h4>
                     <Button 
                       variant="ghost" 
                       size="sm" 
@@ -306,6 +329,7 @@ function LeadsContent() {
                         setRatingFilter('all');
                         setInfluencerFilter('all');
                         setGstFilter('all');
+                        setPaymentInfoFilter('all');
                         setCallStatusFilter('all');
                         setMinAmount('');
                         setMaxAmount('');
@@ -323,12 +347,12 @@ function LeadsContent() {
                   <div className="grid grid-cols-3 gap-6">
                     {role === 'ADMIN' && (
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</Label>
+                        <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Employee</Label>
                         <Select value={salesPersonFilter} onValueChange={setSalesPersonFilter}>
-                          <SelectTrigger className="h-10 bg-slate-50">
+                          <SelectTrigger className="h-10 bg-muted/40">
                             <SelectValue placeholder="Select Employee" />
                           </SelectTrigger>
-                          <SelectContent className="bg-white">
+                          <SelectContent className="bg-card">
                             <SelectItem value="all">All Employees</SelectItem>
                             {users.filter(u => u.role === 'NON_ADMIN').map(u => (
                               <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
@@ -338,12 +362,12 @@ function LeadsContent() {
                       </div>
                     )}
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Workflow Status</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Workflow Status</Label>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="h-10 bg-slate-50">
+                        <SelectTrigger className="h-10 bg-muted/40">
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white">
+                        <SelectContent className="bg-card">
                           <SelectItem value="all">Any Status</SelectItem>
                           <SelectItem value="converted">Converted Only</SelectItem>
                           <SelectItem value="pending">Pending Only</SelectItem>
@@ -352,12 +376,12 @@ function LeadsContent() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Engagement Score</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Engagement Score</Label>
                       <Select value={ratingFilter} onValueChange={setRatingFilter}>
-                        <SelectTrigger className="h-10 bg-slate-50">
+                        <SelectTrigger className="h-10 bg-muted/40">
                           <SelectValue placeholder="Rating" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white">
+                        <SelectContent className="bg-card">
                           <SelectItem value="all">Any Rating</SelectItem>
                           <SelectItem value="interested">High Interest (3+ ★)</SelectItem>
                           <SelectItem value="not-interested">Low Interest (1-2 ★)</SelectItem>
@@ -369,12 +393,12 @@ function LeadsContent() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Origin Channel (Influencer)</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Origin Channel (Influencer)</Label>
                       <Select value={influencerFilter} onValueChange={setInfluencerFilter}>
-                        <SelectTrigger className="h-10 bg-slate-50">
+                        <SelectTrigger className="h-10 bg-muted/40">
                           <SelectValue placeholder="Select Channel" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white">
+                        <SelectContent className="bg-card">
                           <SelectItem value="all">All Channels</SelectItem>
                           {influencers.map(inf => (
                             <SelectItem key={inf.id} value={inf.id}>{inf.name}</SelectItem>
@@ -384,12 +408,12 @@ function LeadsContent() {
                     </div>
 
                     <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GST Intelligence</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">GST Intelligence</Label>
                     <Select value={gstFilter} onValueChange={setGstFilter}>
-                      <SelectTrigger className="h-10 bg-slate-50">
+                      <SelectTrigger className="h-10 bg-muted/40">
                         <SelectValue placeholder="GST Mode" />
                       </SelectTrigger>
-                      <SelectContent className="bg-white">
+                      <SelectContent className="bg-card">
                         <SelectItem value="all">Any Status</SelectItem>
                         <SelectItem value="NO">No</SelectItem>
                         <SelectItem value="YES">Yes</SelectItem>
@@ -400,12 +424,29 @@ function LeadsContent() {
                   </div>
 
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Call Status</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Payment info shared</Label>
+                      <Select
+                        value={paymentInfoFilter}
+                        onValueChange={(v) => setPaymentInfoFilter(v as 'all' | 'shared' | 'not_shared')}
+                      >
+                        <SelectTrigger className="h-10 bg-muted/40">
+                          <SelectValue placeholder="All" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card">
+                          <SelectItem value="all">All</SelectItem>
+                          <SelectItem value="shared">Shared</SelectItem>
+                          <SelectItem value="not_shared">Not shared</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Call Status</Label>
                       <Select value={callStatusFilter} onValueChange={setCallStatusFilter}>
-                        <SelectTrigger className="h-10 bg-slate-50">
+                        <SelectTrigger className="h-10 bg-muted/40">
                           <SelectValue placeholder="Call Status" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white">
+                        <SelectContent className="bg-card">
                           <SelectItem value="all">Any Status</SelectItem>
                           <SelectItem value="CONNECTED">Connected</SelectItem>
                           <SelectItem value="NOT_CONNECTED">Not Connected</SelectItem>
@@ -417,12 +458,12 @@ function LeadsContent() {
 
                     {influencerFilter !== 'all' && (
                       <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Source Code</Label>
+                        <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Source Code</Label>
                         <Select value={sourceCodeFilter} onValueChange={setSourceCodeFilter}>
-                          <SelectTrigger className="h-10 bg-slate-50">
+                          <SelectTrigger className="h-10 bg-muted/40">
                             <SelectValue placeholder="Source Code" />
                           </SelectTrigger>
-                          <SelectContent className="bg-white">
+                          <SelectContent className="bg-card">
                             <SelectItem value="all">All Codes</SelectItem>
                             {(influencers.find(inf => inf.id === influencerFilter)?.sourceCodes ?? [])
                               .filter((sc: { status?: string }) => sc.status !== 'INACTIVE')
@@ -435,15 +476,15 @@ function LeadsContent() {
                     )}
 
                     <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Planned Interaction Date</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Planned Interaction Date</Label>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-slate-50", !followUpDateFilter && "text-muted-foreground")}>
+                        <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-muted/40", !followUpDateFilter && "text-muted-foreground")}>
                           <CalendarIcon className="mr-2 h-4 w-4 text-blue-600" />
                           {followUpDateFilter ? format(followUpDateFilter, 'PPPP') : 'Target a date'}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 bg-white" align="start">
+                      <PopoverContent className="w-auto p-0 bg-card" align="start">
                         <Calendar
                           mode="single"
                           selected={followUpDateFilter}
@@ -455,22 +496,22 @@ function LeadsContent() {
                   </div>
 
                     <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Min)</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Investment (Min)</Label>
                     <Input 
                       type="number" 
                       placeholder="Min ₹" 
-                      className="h-10 bg-slate-50"
+                      className="h-10 bg-muted/40"
                       value={minAmount}
                       onChange={(e) => setMinAmount(e.target.value)}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Max)</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Investment (Max)</Label>
                     <Input 
                       type="number" 
                       placeholder="Max ₹" 
-                      className="h-10 bg-slate-50"
+                      className="h-10 bg-muted/40"
                       value={maxAmount}
                       onChange={(e) => setMaxAmount(e.target.value)}
                     />
@@ -520,8 +561,8 @@ function LeadsContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLeads.length > 0 ? (
-                    filteredLeads.map((lead) => (
+                  {paginatedLeads.length > 0 ? (
+                    paginatedLeads.map((lead) => (
                       <TableRow 
                         key={lead.id} 
                         className="hover:bg-muted/30 transition-colors group border-b h-14 cursor-pointer"
@@ -529,7 +570,7 @@ function LeadsContent() {
                       >
                         {role === 'ADMIN' && (
                           <TableCell>
-                            <span className="text-sm font-medium text-slate-600">
+                            <span className="text-sm font-medium text-muted-foreground">
                               {users.find(u => u.id === lead.createdBy)?.name || '—'}
                             </span>
                           </TableCell>
@@ -539,17 +580,17 @@ function LeadsContent() {
                             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
                               <User className="h-4 w-4 text-blue-600" />
                             </div>
-                            <span className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
+                            <span className="font-medium text-foreground group-hover:text-blue-600 transition-colors">
                               {lead.name}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm font-mono text-slate-600">{lead.mobile}</span>
+                          <span className="text-sm font-mono text-muted-foreground">{lead.mobile}</span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="font-normal bg-white">
-                            <MapPin className="h-3 w-3 mr-1 text-slate-400" />
+                          <Badge variant="outline" className="font-normal bg-card">
+                            <MapPin className="h-3 w-3 mr-1 text-muted-foreground" />
                             {lead.state}
                           </Badge>
                         </TableCell>
@@ -565,7 +606,7 @@ function LeadsContent() {
                               YES
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-slate-400 font-normal">
+                            <Badge variant="outline" className="text-muted-foreground font-normal">
                               NO
                             </Badge>
                           )}
@@ -577,7 +618,7 @@ function LeadsContent() {
                               Converted
                             </Badge>
                           ) : (
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200">
+                            <Badge variant="secondary" className="bg-muted text-muted-foreground border-border">
                               <Clock className="h-3 w-3 mr-1" />
                               Pending
                             </Badge>
@@ -645,12 +686,20 @@ function LeadsContent() {
                 </TableFooter>
               </Table>
             </div>
+
+            <TablePagination
+              page={leadsPage}
+              pageSize={LEADS_PAGE_SIZE}
+              totalItems={filteredLeads.length}
+              onPageChange={setLeadsPage}
+              itemLabel="leads"
+            />
           </CardContent>
         </Card>
 
         {/* Edit Lead Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-white scrollbar-hide">
+          <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-card scrollbar-hide">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold">Edit Lead</DialogTitle>
               <DialogDescription>
@@ -673,15 +722,15 @@ function LeadsContent() {
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent className="bg-white">
+          <DialogContent className="bg-card">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-slate-900 border-b pb-2">Delete Lead</DialogTitle>
-              <DialogDescription className="py-4 text-slate-600">
+              <DialogTitle className="text-xl font-bold text-foreground border-b pb-2">Delete Lead</DialogTitle>
+              <DialogDescription className="py-4 text-muted-foreground">
                 Are you sure you want to delete this lead? This action cannot be undone and will remove all associated data.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter className="bg-slate-50 p-4 -mx-6 -mb-6 rounded-b-lg">
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="bg-white">
+            <DialogFooter className="bg-muted/40 p-4 -mx-6 -mb-6 rounded-b-lg">
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} className="bg-card">
                 Cancel
               </Button>
               <Button variant="destructive" onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700">
@@ -693,10 +742,10 @@ function LeadsContent() {
 
         {/* View Lead Details Dialog */}
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-          <DialogContent className="max-w-2xl bg-white rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
+          <DialogContent className="max-w-2xl bg-card rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                <div className="w-16 h-16 rounded-2xl bg-card/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
                   <User className="h-8 w-8 text-white" />
                 </div>
                 <div>
@@ -710,34 +759,34 @@ function LeadsContent() {
               {/* Core Information */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mobile Number</p>
-                  <p className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Mobile Number</p>
+                  <p className="text-base font-bold text-foreground flex items-center gap-2">
                     <Phone className="h-4 w-4 text-blue-600" />
                     {viewingLead?.mobile}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
-                  <p className="text-base font-bold text-slate-900">{viewingLead?.email || 'N/A'}</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Email Address</p>
+                  <p className="text-base font-bold text-foreground">{viewingLead?.email || 'N/A'}</p>
                 </div>
               </div>
 
               {/* Location Data */}
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-6">
+              <div className="p-5 bg-muted/40 rounded-2xl border border-border grid grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">State / Region</p>
-                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-slate-400" />
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">State / Region</p>
+                  <p className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
                     {viewingLead?.state}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City / Locale</p>
-                  <p className="text-sm font-bold text-slate-700">{viewingLead?.city || 'N/A'}</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">City / Locale</p>
+                  <p className="text-sm font-bold text-foreground">{viewingLead?.city || 'N/A'}</p>
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Postal Address</p>
-                  <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Postal Address</p>
+                  <p className="text-sm font-medium text-muted-foreground leading-relaxed italic">
                     {viewingLead?.address || 'No address provided'}
                     {viewingLead?.pincode ? ` - ${viewingLead.pincode}` : ''}
                   </p>
@@ -747,21 +796,21 @@ function LeadsContent() {
               {/* Status & Rating */}
               <div className="grid grid-cols-2 gap-6">
                  <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pipeline Status</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Pipeline Status</p>
                   {viewingLead?.converted ? (
                     <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 px-4 py-1.5 rounded-lg font-bold">
                       <CheckCircle className="h-4 w-4 mr-2" />
                       CONVERTED
                     </Badge>
                   ) : (
-                    <Badge className="bg-slate-100 text-slate-600 border-slate-200 px-4 py-1.5 rounded-lg font-bold shadow-none">
-                      <Clock className="h-4 w-4 mr-2 text-slate-400" />
+                    <Badge className="bg-muted text-muted-foreground border-border px-4 py-1.5 rounded-lg font-bold shadow-none">
+                      <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
                       PENDING AUDIT
                     </Badge>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Engagement Score</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Engagement Score</p>
                   <Badge className={cn("px-4 py-1.5 rounded-lg border-0 shadow-lg font-black", getRatingColor(viewingLead?.rating || null))}>
                     <Star className="h-4 w-4 mr-2 fill-current" />
                     {viewingLead?.rating ? `${viewingLead.rating}.0 / 5.0` : 'NOT SCORED'}
@@ -769,18 +818,23 @@ function LeadsContent() {
                 </div>
               </div>
 
+              <div className="space-y-1 pt-2 border-t border-border">
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Payment information shared</p>
+                <p className="text-sm font-bold text-foreground">{viewingLead?.paymentInfoShared ? 'Yes' : 'No'}</p>
+              </div>
+
               {/* Workflow Anchors */}
-              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-border">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Interaction Plan</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Next Interaction Plan</p>
                   <p className="text-sm font-black text-blue-600 flex items-center gap-2">
                     <LucideCalendar className="h-4 w-4" />
                     {viewingLead?.followUpDate ? format(new Date(viewingLead.followUpDate), 'MMMM dd, yyyy') : 'No follow-up scheduled'}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registration Stamp</p>
-                  <p className="text-sm font-bold text-slate-700">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Registration Stamp</p>
+                  <p className="text-sm font-bold text-foreground">
                     {viewingLead?.createdAt ? format(new Date(viewingLead.createdAt), 'MMM dd, yyyy') : 'N/A'}
                   </p>
                 </div>
@@ -788,8 +842,8 @@ function LeadsContent() {
 
               {/* Notes Context */}
               {viewingLead?.notes && (
-                <div className="space-y-3 pt-6 border-t border-slate-100">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Context & Audit Notes</p>
+                <div className="space-y-3 pt-6 border-t border-border">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Context & Audit Notes</p>
                   <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-sm text-amber-900 font-medium leading-relaxed italic">
                     "{viewingLead.notes}"
                   </div>
@@ -797,8 +851,8 @@ function LeadsContent() {
               )}
             </div>
 
-            <DialogFooter className="p-8 border-t bg-slate-50 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-bold text-slate-600 bg-white border-slate-200">
+            <DialogFooter className="p-8 border-t bg-muted/40 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-bold text-muted-foreground bg-card border-border">
                 CLOSE JOURNAL
               </Button>
               <Button 

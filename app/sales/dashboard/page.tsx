@@ -24,13 +24,68 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { subMonths, addMonths, format } from 'date-fns';
 import { LeadForm } from '@/components/LeadForm';
 import { Lead } from '@/types';
+import {
+  effectiveConversionDate,
+  isConversionInDateRange,
+  isCreatedInDateRange,
+} from '@/lib/lead-reporting';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
+import { API_BASE_URL } from '@/lib/api';
+import { TablePagination, paginateArray } from '@/components/ui/table-pagination';
+
+/** Non-admin dashboard summary: scoped to JWT user via salesExecutiveId / createdBy on the API */
+type ExecDashboardSummary = {
+  totalRevenue: number;
+  totalSales: number;
+  thisMonthRevenue: number;
+  currentMonthSales: number;
+};
 
 export default function SalesDashboardPage() {
-  const { leads, sales, influencers, users, dateRange, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
+  const { leads, sales, influencers, users, dateRange, token, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
   const router = useRouter();
+  const [execSummary, setExecSummary] = useState<ExecDashboardSummary | null>(null);
+
+  useEffect(() => {
+    if (!token) {
+      setExecSummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/sales/dashboard/summary`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const monthRev =
+          typeof data?.thisMonthRevenue === 'number'
+            ? data.thisMonthRevenue
+            : typeof data?.currentMonthRevenue === 'number'
+              ? data.currentMonthRevenue
+              : 0;
+        setExecSummary({
+          totalRevenue: typeof data?.totalRevenue === 'number' ? data.totalRevenue : 0,
+          totalSales: typeof data?.totalSales === 'number' ? data.totalSales : 0,
+          thisMonthRevenue: monthRev,
+          currentMonthSales:
+            typeof data?.currentMonthSales === 'number' ? data.currentMonthSales : 0,
+        });
+      } catch {
+        /* non-blocking KPI */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, leads.length, sales.length]);
 
   useEffect(() => {
     loadLeads();
@@ -46,12 +101,15 @@ export default function SalesDashboardPage() {
   const [auditRating, setAuditRating] = useState('all');
   const [auditInfluencerFilter, setAuditInfluencerFilter] = useState('all');
   const [auditGstFilter, setAuditGstFilter] = useState('all');
+  const [auditPaymentInfoFilter, setAuditPaymentInfoFilter] = useState<'all' | 'shared' | 'not_shared'>('all');
   const [auditCallStatusFilter, setAuditCallStatusFilter] = useState('all');
   const [auditMinAmount, setAuditMinAmount] = useState('');
   const [auditMaxAmount, setAuditMaxAmount] = useState('');
   const [auditSourceCodeFilter, setAuditSourceCodeFilter] = useState('all');
   const [auditFollowUpDateFilter, setAuditFollowUpDateFilter] = useState<Date | undefined>(undefined);
   const [auditSalesPersonFilter, setAuditSalesPersonFilter] = useState('all');
+  const [auditPage, setAuditPage] = useState(1);
+  const AUDIT_PAGE_SIZE = 15;
 
   // Reset source code when influencer changes to 'all' (source codes are per-influencer)
   useEffect(() => {
@@ -101,7 +159,7 @@ export default function SalesDashboardPage() {
   };
 
   const getRatingColor = (rating: number | null) => {
-    if (!rating) return 'bg-gray-100 text-gray-600';
+    if (!rating) return 'bg-muted text-muted-foreground';
     if (rating >= 4) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
     if (rating >= 3) return 'bg-amber-100 text-amber-700 border-amber-200';
     return 'bg-rose-100 text-rose-700 border-rose-200';
@@ -134,6 +192,11 @@ export default function SalesDashboardPage() {
     const end = endOfMonth(auditMonth);
     
     let filtered = leads.filter(l => {
+      if (auditStatus === 'converted') {
+        if (!l.converted) return false;
+        const conv = effectiveConversionDate(l, sales);
+        return conv ? isWithinInterval(conv, { start, end }) : false;
+      }
       const d = new Date(l.createdAt);
       return isWithinInterval(d, { start, end });
     });
@@ -166,6 +229,14 @@ export default function SalesDashboardPage() {
         });
     }
 
+    if (auditPaymentInfoFilter !== 'all') {
+      filtered = filtered.filter((l) => {
+        const shared = !!(l as Lead).paymentInfoShared;
+        if (auditPaymentInfoFilter === 'shared') return shared;
+        return !shared;
+      });
+    }
+
     if (auditCallStatusFilter !== 'all') {
         filtered = filtered.filter(l => l.callStatus === auditCallStatusFilter);
     }
@@ -196,26 +267,23 @@ export default function SalesDashboardPage() {
     }
 
     return filtered;
-  }, [leads, auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+  }, [leads, sales, auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditPaymentInfoFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditMonth, auditSearch, auditStatus, auditRating, auditInfluencerFilter, auditGstFilter, auditPaymentInfoFilter, auditCallStatusFilter, auditSourceCodeFilter, auditFollowUpDateFilter, auditMinAmount, auditMaxAmount, auditSalesPersonFilter]);
+
+  const paginatedAuditedLeads = useMemo(
+    () => paginateArray(auditedLeads, auditPage, AUDIT_PAGE_SIZE),
+    [auditedLeads, auditPage]
+  );
 
   // Filtered lists for KPI display
   const filteredLeads = useMemo(() => {
     if (!dateRange?.from && !dateRange?.to) return leads;
-    return leads.filter(l => {
-      const d = new Date(l.createdAt);
-      d.setHours(0,0,0,0);
-      if (dateRange.from) {
-        const from = new Date(dateRange.from);
-        from.setHours(0,0,0,0);
-        if (d < from) return false;
-      }
-      if (dateRange.to) {
-        const to = new Date(dateRange.to);
-        to.setHours(23,59,59,999);
-        if (d > to) return false;
-      }
-      return true;
-    });
+    return leads.filter(l =>
+      isCreatedInDateRange(l, dateRange.from, dateRange.to),
+    );
   }, [leads, dateRange]);
 
   const filteredSales = useMemo(() => {
@@ -239,10 +307,24 @@ export default function SalesDashboardPage() {
 
   // KPI Calculations
   const totalLeads = filteredLeads.length;
-  const convertedLeads = filteredLeads.filter(l => l.converted).length;
+  const conversionsInSelectedRange = useMemo(() => {
+    if (!dateRange?.from && !dateRange?.to) {
+      return leads.filter((l) => l.converted).length;
+    }
+    return leads.filter((l) =>
+      isConversionInDateRange(l, sales, dateRange.from, dateRange.to),
+    ).length;
+  }, [leads, sales, dateRange]);
+  const convertedLeads = conversionsInSelectedRange;
   const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
-  const totalSales = filteredSales.length;
-  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
+  const clientTotalSales = filteredSales.length;
+  const clientTotalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
+  const hasDateFilter = Boolean(dateRange?.from || dateRange?.to);
+  /** All-time KPIs use API totals (your salesExecutiveId only); date filter uses client slice */
+  const totalSales = hasDateFilter ? clientTotalSales : (execSummary?.totalSales ?? clientTotalSales);
+  const totalRevenue = hasDateFilter
+    ? clientTotalRevenue
+    : (execSummary?.totalRevenue ?? clientTotalRevenue);
   // GST % = (pending leads with GST YES/APPLIED / total pending leads) * 100 — only non-converted
   const isGstLead = (l: { gstStatus?: string; gstCustomer?: boolean; gst?: boolean }) =>
     l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstStatus === 'APPLIED_THROUGH_US' || l.gstCustomer === true || l.gst === true;
@@ -361,9 +443,11 @@ export default function SalesDashboardPage() {
             <CardContent>
               <div className="flex items-baseline gap-2 mb-1">
                 <div className="text-4xl font-bold text-orange-600">{totalSales}</div>
-                {currentMonthSales.length > 0 && (
+                {(execSummary?.currentMonthSales != null
+                  ? execSummary.currentMonthSales > 0
+                  : currentMonthSales.length > 0) && (
                   <Badge variant="success" className="text-xs">
-                    {currentMonthSales.length} this month
+                    {(execSummary?.currentMonthSales ?? currentMonthSales.length)} this month
                   </Badge>
                 )}
               </div>
@@ -380,7 +464,28 @@ export default function SalesDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold mb-1 text-emerald-600">₹{totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Total revenue generated</p>
+              <p className="text-xs text-muted-foreground">
+                {hasDateFilter ? 'Revenue in selected range (your leads)' : 'Your recorded sales (all time)'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="kpi-card card-hover border-l-4 border-l-teal-500 cursor-pointer"
+            onClick={() => handleCardClick('sales')}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                This Month Revenue
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold mb-1 text-teal-700">
+                ₹{(execSummary?.thisMonthRevenue ?? 0).toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                By conversion date · your sales · live amounts
+              </p>
             </CardContent>
           </Card>
 
@@ -443,23 +548,23 @@ export default function SalesDashboardPage() {
         </div>
         <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
           <DialogContent className="max-w-6xl w-[95vw] h-[90vh] p-0 overflow-hidden flex flex-col border shadow-2xl rounded-xl">
-            <DialogHeader className="p-6 bg-white border-b shrink-0">
+            <DialogHeader className="p-6 bg-card border-b shrink-0">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-lg bg-sky-100 flex items-center justify-center">
                     <LayoutDashboard className="h-6 w-6 text-sky-600" />
                   </div>
                   <div>
-                    <DialogTitle className="text-2xl font-bold text-slate-900">
+                    <DialogTitle className="text-2xl font-bold text-foreground">
                       Lead Audit - {format(auditMonth, 'MMMM yyyy')}
                     </DialogTitle>
-                    <DialogDescription className="text-slate-500">
+                    <DialogDescription className="text-muted-foreground">
                       Viewing lead registrations for the selected period
                     </DialogDescription>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border">
+                <div className="flex items-center gap-2 bg-muted/40 p-1 rounded-lg border">
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -468,7 +573,7 @@ export default function SalesDashboardPage() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="px-4 font-bold text-slate-700 min-w-[140px] text-center text-sm">
+                  <div className="px-4 font-bold text-foreground min-w-[140px] text-center text-sm">
                     {format(auditMonth, 'MMM yyyy')}
                   </div>
                   <Button 
@@ -484,10 +589,10 @@ export default function SalesDashboardPage() {
 
               <div className="flex flex-wrap gap-3 items-center">
                 <div className="relative flex-1 min-w-[300px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
                     placeholder="Search by name or mobile..." 
-                    className="pl-10 h-11 bg-slate-50 border-slate-200"
+                    className="pl-10 h-11 bg-muted/40 border-border"
                     value={auditSearch}
                     onChange={(e) => setAuditSearch(e.target.value)}
                   />
@@ -495,20 +600,20 @@ export default function SalesDashboardPage() {
 
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="h-11 gap-2 border-dashed border-slate-300 px-6 font-bold text-slate-700">
+                    <Button variant="outline" className="h-11 gap-2 border-dashed border-border px-6 font-bold text-foreground">
                       <Filter className="h-4 w-4" />
                       Funnel Filters
-                      {(auditStatus !== 'all' || auditRating !== 'all' || auditInfluencerFilter !== 'all' || auditGstFilter !== 'all' || auditCallStatusFilter !== 'all' || auditMinAmount || auditMaxAmount || auditSourceCodeFilter !== 'all' || auditFollowUpDateFilter || auditSalesPersonFilter !== 'all') && (
+                      {(auditStatus !== 'all' || auditRating !== 'all' || auditInfluencerFilter !== 'all' || auditGstFilter !== 'all' || auditPaymentInfoFilter !== 'all' || auditCallStatusFilter !== 'all' || auditMinAmount || auditMaxAmount || auditSourceCodeFilter !== 'all' || auditFollowUpDateFilter || auditSalesPersonFilter !== 'all') && (
                         <Badge variant="secondary" className="ml-1 px-1 h-5 min-w-[1.25rem] bg-blue-100 text-blue-700">
                           !
                         </Badge>
                       )}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[450px] p-6 bg-white shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[80vh] scrollbar-hide" align="end">
+                  <PopoverContent className="w-[450px] p-6 bg-card shadow-2xl rounded-2xl border-0 overflow-y-auto max-h-[80vh] scrollbar-hide" align="end">
                     <div className="space-y-6">
                       <div className="flex items-center justify-between border-b pb-4">
-                        <h4 className="font-black text-slate-900 uppercase tracking-tight text-base">Advance Audit Engine</h4>
+                        <h4 className="font-black text-foreground uppercase tracking-tight text-base">Advance Audit Engine</h4>
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -518,6 +623,7 @@ export default function SalesDashboardPage() {
                             setAuditRating('all');
                             setAuditInfluencerFilter('all');
                             setAuditGstFilter('all');
+                            setAuditPaymentInfoFilter('all');
                             setAuditCallStatusFilter('all');
                             setAuditMinAmount('');
                             setAuditMaxAmount('');
@@ -533,12 +639,12 @@ export default function SalesDashboardPage() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pipeline Status</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Pipeline Status</Label>
                           <Select value={auditStatus} onValueChange={setAuditStatus}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Status" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Global Status</SelectItem>
                               <SelectItem value="converted">Lead Converted</SelectItem>
                               <SelectItem value="pending">Awaiting Audit</SelectItem>
@@ -547,12 +653,12 @@ export default function SalesDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Engagement Rating</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Engagement Rating</Label>
                           <Select value={auditRating} onValueChange={setAuditRating}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Rating" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Any Rating</SelectItem>
                               {[5,4,3,2,1].map(r => (
                                 <SelectItem key={r} value={String(r)}>{r} Star Ranking</SelectItem>
@@ -562,12 +668,12 @@ export default function SalesDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Influencer Source</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Influencer Source</Label>
                           <Select value={auditInfluencerFilter} onValueChange={setAuditInfluencerFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Select Influencer" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">All Channels</SelectItem>
                               {influencers.map(inf => (
                                 <SelectItem key={inf.id} value={inf.id}>{inf.name}</SelectItem>
@@ -577,12 +683,12 @@ export default function SalesDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GST Recognition</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">GST Recognition</Label>
                           <Select value={auditGstFilter} onValueChange={setAuditGstFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="GST Mode" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Universal GST</SelectItem>
                               <SelectItem value="NO">No</SelectItem>
                               <SelectItem value="YES">Yes</SelectItem>
@@ -593,12 +699,29 @@ export default function SalesDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Call Status</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Payment info shared</Label>
+                          <Select
+                            value={auditPaymentInfoFilter}
+                            onValueChange={(v) => setAuditPaymentInfoFilter(v as 'all' | 'shared' | 'not_shared')}
+                          >
+                            <SelectTrigger className="h-10 bg-muted/40">
+                              <SelectValue placeholder="All" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card">
+                              <SelectItem value="all">All</SelectItem>
+                              <SelectItem value="shared">Shared</SelectItem>
+                              <SelectItem value="not_shared">Not shared</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Call Status</Label>
                           <Select value={auditCallStatusFilter} onValueChange={setAuditCallStatusFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Call Status" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">Any Status</SelectItem>
                               <SelectItem value="CONNECTED">Connected</SelectItem>
                               <SelectItem value="NOT_CONNECTED">Not Connected</SelectItem>
@@ -610,12 +733,12 @@ export default function SalesDashboardPage() {
 
                         {auditInfluencerFilter !== 'all' && (
                           <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Source Code</Label>
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Source Code</Label>
                             <Select value={auditSourceCodeFilter} onValueChange={setAuditSourceCodeFilter}>
-                              <SelectTrigger className="h-10 bg-slate-50">
+                              <SelectTrigger className="h-10 bg-muted/40">
                                 <SelectValue placeholder="Source Code" />
                               </SelectTrigger>
-                              <SelectContent className="bg-white">
+                              <SelectContent className="bg-card">
                                 <SelectItem value="all">All Codes</SelectItem>
                                 {(influencers.find(inf => inf.id === auditInfluencerFilter)?.sourceCodes ?? [])
                                   .filter((sc: { status?: string }) => sc.status !== 'INACTIVE')
@@ -628,15 +751,15 @@ export default function SalesDashboardPage() {
                         )}
 
                         <div className="col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Interaction Schedule (Follow-up)</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Interaction Schedule (Follow-up)</Label>
                           <Popover>
                             <PopoverTrigger asChild>
-                              <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-slate-50", !auditFollowUpDateFilter && "text-muted-foreground")}>
+                              <Button variant="outline" className={cn("w-full justify-start text-left font-bold bg-muted/40", !auditFollowUpDateFilter && "text-muted-foreground")}>
                                 <CalendarIcon className="mr-2 h-4 w-4 text-blue-600" />
                                 {auditFollowUpDateFilter ? format(auditFollowUpDateFilter, 'PPPP') : 'Target a date'}
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 bg-white" align="start">
+                            <PopoverContent className="w-auto p-0 bg-card" align="start">
                               <Calendar
                                 mode="single"
                                 selected={auditFollowUpDateFilter}
@@ -648,22 +771,22 @@ export default function SalesDashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Min)</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Investment (Min)</Label>
                           <Input 
                             type="number" 
                             placeholder="Min ₹" 
-                            className="h-10 bg-slate-50"
+                            className="h-10 bg-muted/40"
                             value={auditMinAmount}
                             onChange={(e) => setAuditMinAmount(e.target.value)}
                           />
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Investment (Max)</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Investment (Max)</Label>
                           <Input 
                             type="number" 
                             placeholder="Max ₹" 
-                            className="h-10 bg-slate-50"
+                            className="h-10 bg-muted/40"
                             value={auditMaxAmount}
                             onChange={(e) => setAuditMaxAmount(e.target.value)}
                           />
@@ -671,12 +794,12 @@ export default function SalesDashboardPage() {
 
                         {role === 'ADMIN' && (
                         <div className="col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee</Label>
+                          <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Employee</Label>
                           <Select value={auditSalesPersonFilter} onValueChange={setAuditSalesPersonFilter}>
-                            <SelectTrigger className="h-10 bg-slate-50">
+                            <SelectTrigger className="h-10 bg-muted/40">
                               <SelectValue placeholder="Select Employee" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-card">
                               <SelectItem value="all">All Employees</SelectItem>
                               {users.filter(u => u.role === 'NON_ADMIN').map(u => (
                                 <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
@@ -692,7 +815,7 @@ export default function SalesDashboardPage() {
               </div>
             </DialogHeader>
 
-            <div className="flex-1 overflow-auto p-0 bg-white">
+            <div className="flex-1 overflow-auto p-0 bg-card">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 h-10 hover:bg-transparent">
@@ -708,13 +831,13 @@ export default function SalesDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {auditedLeads.length > 0 ? auditedLeads.map((lead) => (
+                  {auditedLeads.length > 0 ? paginatedAuditedLeads.map((lead) => (
                     <TableRow 
                       key={lead.id} 
-                      className="h-12 hover:bg-slate-50 transition-colors cursor-pointer border-b"
+                      className="h-12 hover:bg-muted/40 transition-colors cursor-pointer border-b"
                     >
                        <TableCell 
-                        className="pl-6 font-medium text-sm text-slate-900"
+                        className="pl-6 font-medium text-sm text-foreground"
                         onClick={() => {
                           setViewingLead(lead);
                           setIsViewDialogOpen(true);
@@ -728,7 +851,7 @@ export default function SalesDashboardPage() {
                         }}
                        >{lead.mobile}</TableCell>
                        <TableCell 
-                        className="text-sm text-slate-600"
+                        className="text-sm text-muted-foreground"
                         onClick={() => {
                           setViewingLead(lead);
                           setIsViewDialogOpen(true);
@@ -745,7 +868,7 @@ export default function SalesDashboardPage() {
                               YES
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-slate-400 font-normal h-6">
+                            <Badge variant="outline" className="text-muted-foreground font-normal h-6">
                               NO
                             </Badge>
                           )}
@@ -797,7 +920,7 @@ export default function SalesDashboardPage() {
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-blue-600"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditClick(lead);
@@ -809,7 +932,7 @@ export default function SalesDashboardPage() {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="h-8 w-8 p-0 text-slate-500 hover:text-red-600"
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleDeleteClick(lead.id);
@@ -830,11 +953,21 @@ export default function SalesDashboardPage() {
                   )}
                 </TableBody>
               </Table>
+
+              <div className="px-6 pb-4">
+                <TablePagination
+                  page={auditPage}
+                  pageSize={AUDIT_PAGE_SIZE}
+                  totalItems={auditedLeads.length}
+                  onPageChange={setAuditPage}
+                  itemLabel="leads"
+                />
+              </div>
             </div>
             
-            <div className="p-6 border-t bg-slate-50 flex justify-between items-center shrink-0">
-               <div className="flex items-center gap-4 text-sm font-medium text-slate-600">
-                 <span>Total Leads: <span className="text-slate-900 font-bold">{auditedLeads.length}</span></span>
+            <div className="p-6 border-t bg-muted/40 flex justify-between items-center shrink-0">
+               <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
+                 <span>Total Leads: <span className="text-foreground font-bold">{auditedLeads.length}</span></span>
                  <div className="w-px h-4 bg-slate-300" />
                  <span>Converted: <span className="text-emerald-600 font-bold">{auditedLeads.filter(l => l.converted).length}</span></span>
                </div>
@@ -860,10 +993,10 @@ export default function SalesDashboardPage() {
 
         {/* View Lead Details Dialog */}
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-          <DialogContent className="max-w-4xl bg-white rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
+          <DialogContent className="max-w-4xl bg-card rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white shrink-0">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                <div className="w-16 h-16 rounded-2xl bg-card/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
                   <User className="h-8 w-8 text-white" />
                 </div>
                 <div>
@@ -877,34 +1010,34 @@ export default function SalesDashboardPage() {
               {/* Core Information */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mobile Number</p>
-                  <p className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Mobile Number</p>
+                  <p className="text-base font-bold text-foreground flex items-center gap-2">
                     <Phone className="h-4 w-4 text-blue-600" />
                     {viewingLead?.mobile}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
-                  <p className="text-base font-bold text-slate-900">{viewingLead?.email || 'N/A'}</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Email Address</p>
+                  <p className="text-base font-bold text-foreground">{viewingLead?.email || 'N/A'}</p>
                 </div>
               </div>
 
               {/* Location Data */}
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 grid grid-cols-2 gap-6">
+              <div className="p-5 bg-muted/40 rounded-2xl border border-border grid grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">State / Region</p>
-                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-slate-400" />
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">State / Region</p>
+                  <p className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
                     {viewingLead?.state}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">City / Locale</p>
-                  <p className="text-sm font-bold text-slate-700">{viewingLead?.city || 'N/A'}</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">City / Locale</p>
+                  <p className="text-sm font-bold text-foreground">{viewingLead?.city || 'N/A'}</p>
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Postal Address</p>
-                  <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Postal Address</p>
+                  <p className="text-sm font-medium text-muted-foreground leading-relaxed italic">
                     {viewingLead?.address || 'No address provided'}
                     {viewingLead?.pincode ? ` - ${viewingLead.pincode}` : ''}
                   </p>
@@ -914,21 +1047,21 @@ export default function SalesDashboardPage() {
               {/* Status & Rating */}
               <div className="grid grid-cols-2 gap-6">
                  <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pipeline Status</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Pipeline Status</p>
                   {viewingLead?.converted ? (
                     <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 px-4 py-1.5 rounded-lg font-bold">
                       <CheckCircle className="h-4 w-4 mr-2" />
                       CONVERTED
                     </Badge>
                   ) : (
-                    <Badge className="bg-slate-100 text-slate-600 border-slate-200 px-4 py-1.5 rounded-lg font-bold shadow-none">
-                      <Clock className="h-4 w-4 mr-2 text-slate-400" />
+                    <Badge className="bg-muted text-muted-foreground border-border px-4 py-1.5 rounded-lg font-bold shadow-none">
+                      <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
                       PENDING AUDIT
                     </Badge>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Engagement Score</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Engagement Score</p>
                   <Badge className={cn("px-4 py-1.5 rounded-lg border-0 shadow-lg font-black", getRatingColor(viewingLead?.rating || null))}>
                     <Star className="h-4 w-4 mr-2 fill-current" />
                     {viewingLead?.rating ? `${viewingLead.rating}.0 / 5.0` : 'NOT SCORED'}
@@ -936,18 +1069,23 @@ export default function SalesDashboardPage() {
                 </div>
               </div>
 
+              <div className="space-y-1 pt-2 border-t border-border">
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Payment information shared</p>
+                <p className="text-sm font-bold text-foreground">{viewingLead?.paymentInfoShared ? 'Yes' : 'No'}</p>
+              </div>
+
               {/* Workflow Anchors */}
-              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-border">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Interaction Plan</p>
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Next Interaction Plan</p>
                   <p className="text-sm font-black text-blue-600 flex items-center gap-2">
                     <LucideCalendar className="h-4 w-4" />
                     {viewingLead?.followUpDate ? format(new Date(viewingLead.followUpDate), 'MMMM dd, yyyy') : 'No follow-up scheduled'}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registration Stamp</p>
-                  <p className="text-sm font-bold text-slate-700">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Registration Stamp</p>
+                  <p className="text-sm font-bold text-foreground">
                     {viewingLead?.createdAt ? format(new Date(viewingLead.createdAt), 'MMM dd, yyyy') : 'N/A'}
                   </p>
                 </div>
@@ -955,8 +1093,8 @@ export default function SalesDashboardPage() {
 
               {/* Notes Context */}
               {viewingLead?.notes && (
-                <div className="space-y-3 pt-6 border-t border-slate-100">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Context & Audit Notes</p>
+                <div className="space-y-3 pt-6 border-t border-border">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Context & Audit Notes</p>
                   <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-sm text-amber-900 font-medium leading-relaxed italic">
                     "{viewingLead.notes}"
                   </div>
@@ -964,8 +1102,8 @@ export default function SalesDashboardPage() {
               )}
             </div>
 
-            <div className="p-8 border-t bg-slate-50 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-bold text-slate-600 bg-white border-slate-200">
+            <div className="p-8 border-t bg-muted/40 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)} className="rounded-xl px-8 font-bold text-muted-foreground bg-card border-border">
                 CLOSE DETAILS
               </Button>
               <Button 
@@ -984,7 +1122,7 @@ export default function SalesDashboardPage() {
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent className="sm:max-w-[425px] bg-white">
+          <DialogContent className="sm:max-w-[425px] bg-card">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold text-red-600">Delete Lead</DialogTitle>
               <DialogDescription>
@@ -1004,7 +1142,7 @@ export default function SalesDashboardPage() {
 
         {/* Edit Lead Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-white scrollbar-hide">
+          <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-card scrollbar-hide">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold">Edit Lead</DialogTitle>
               <DialogDescription>

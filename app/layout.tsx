@@ -2,7 +2,8 @@
 
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import  {DetailModal}  from "@/components/DetailModal";
+import { DetailModal } from "@/components/DetailModal";
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,12 +21,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden bg-background text-foreground`}
       >
-        {children}
-        <DetailModal />
+        <ThemeProvider>
+          {children}
+          <DetailModal />
+        </ThemeProvider>
       </body>
     </html>
   );

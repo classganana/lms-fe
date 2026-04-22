@@ -99,10 +99,10 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/40 to-background p-4">
       <div className="w-full max-w-md">
-        <Button 
-            variant="ghost" 
+        <Button
+            variant="ghost"
             className="mb-4 pl-0 hover:bg-transparent hover:text-primary"
             onClick={() => router.back()}
         >
@@ -112,19 +112,19 @@ export default function AdminLoginPage() {
 
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-primary shadow-lg mb-4">
-            <span className="text-white font-bold text-2xl">L</span>
+            <span className="text-primary-foreground font-bold text-2xl">L</span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome Back</h1>
+          <h1 className="text-3xl font-bold tracking-tight mb-2 text-foreground">Welcome Back</h1>
           <p className="text-muted-foreground">Enter your credentials to continue</p>
         </div>
-        
-        <div className="grid grid-cols-2 gap-2 mb-6 p-1 bg-white/50 backdrop-blur-sm rounded-lg border">
+
+        <div className="grid grid-cols-2 gap-2 mb-6 p-1 bg-muted/60 backdrop-blur-sm rounded-lg border border-border">
             <button
                 type="button"
                 onClick={() => setActiveTab('admin')}
                 className={`py-2 text-sm font-medium rounded-md transition-all ${
-                    activeTab === 'admin' 
-                    ? 'bg-white shadow-sm text-primary' 
+                    activeTab === 'admin'
+                    ? 'bg-background shadow-sm text-primary'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
@@ -135,7 +135,7 @@ export default function AdminLoginPage() {
                 onClick={() => setActiveTab('sales')}
                 className={`py-2 text-sm font-medium rounded-md transition-all ${
                     activeTab === 'sales'
-                    ? 'bg-white shadow-sm text-primary' 
+                    ? 'bg-background shadow-sm text-primary'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
@@ -143,7 +143,7 @@ export default function AdminLoginPage() {
             </button>
         </div>
 
-        <Card className="shadow-2xl border-0 backdrop-blur-sm bg-white/95">
+        <Card className="shadow-2xl border border-border backdrop-blur-sm bg-card/95">
           <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-2xl font-semibold">
                 {activeTab === 'admin' ? 'Admin Sign In' : 'Sales Sign In'}
@@ -174,7 +174,7 @@ export default function AdminLoginPage() {
                 />
               </div>
               
-              {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
+              {error && <p className="text-sm text-destructive font-medium">{error}</p>}
 
               <Button
                 type="submit"

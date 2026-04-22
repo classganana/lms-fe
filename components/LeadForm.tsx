@@ -16,9 +16,18 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useStore } from '@/store';
 import { format } from 'date-fns';
 import { CalendarIcon, Star, CheckCircle, Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Lead } from '@/types';
 import { cn } from '@/lib/utils';
-import { API_BASE_URL } from '@/lib/api';
+import { useLeadFormBootstrap } from '@/hooks/useLeadFormBootstrap';
+import {
+  extractId,
+  gstStatuses,
+  leadCallStatuses,
+  mapLeadToFormValues,
+} from '@/lib/lead-form-map';
+
+const toId = extractId;
 
 const states = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
@@ -29,9 +38,6 @@ const states = [
   'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir'
 ];
 
-const callStatuses = ['CONNECTED', 'NOT_CONNECTED', 'BUSY', 'WRONG_NUMBER'] as const;
-
-const gstStatuses = ['NO', 'YES', 'APPLIED', 'APPLIED_THROUGH_US'] as const;
 const GST_LABELS: Record<(typeof gstStatuses)[number], string> = {
   NO: 'No',
   YES: 'Yes',
@@ -49,13 +55,14 @@ const leadSchema = z.object({
   email: z.string().email('Invalid email address').or(z.literal('')),
   influencerId: z.string().min(1, 'Please select an influencer'),
   sourceCode: z.string().optional(),
-  callStatus: z.enum(callStatuses).or(z.literal('')).refine((v) => v !== '', 'Please select call status'),
+  callStatus: z.enum(leadCallStatuses).or(z.literal('')).refine((v) => v !== '', 'Please select call status'),
   rating: z.number().min(1).max(5).nullable().optional(),
   notes: z.string().min(1, 'Notes are required'),
   followUpDate: z.date().nullable().optional(),
   converted: z.boolean(),
   salesAmount: z.number().min(0).optional().nullable(),
   gstStatus: z.enum(gstStatuses).default('NO'),
+  paymentInfoShared: z.boolean().default(false),
 });
 
 type LeadFormData = z.input<typeof leadSchema>;
@@ -70,23 +77,18 @@ interface LeadFormProps {
 
 export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, showCardWrapper = true }: LeadFormProps) {
   const router = useRouter();
-  const { influencers, users, addLead, updateLead, loadLeads, loadUsers, loadInfluencers } = useStore();
+  const { influencers, addLead, updateLead, loadLeads, role } = useStore();
+  const bootstrap = useLeadFormBootstrap(initialData?.id);
+
   const [originalLead, setOriginalLead] = useState<Lead | null>(null);
   const [discoveredLead, setDiscoveredLead] = useState<Lead | null>(null);
   const [showAlert, setShowAlert] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [mobileReadOnly, setMobileReadOnly] = useState(false);
   const [influencerReadOnly, setInfluencerReadOnly] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    loadUsers();
-    loadInfluencers();
-    loadLeads();
-  }, [loadUsers, loadInfluencers, loadLeads]);
-
+  const hydrationKeyRef = useRef<string | null>(null);
+  const discoverySnapshotRef = useRef<{ mobileDigits: string; leadId: string } | null>(null);
 
   const {
     register,
@@ -114,6 +116,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       converted: false,
       salesAmount: null,
       gstStatus: 'NO',
+      paymentInfoShared: false,
     },
   });
 
@@ -122,6 +125,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const followUpDate = watch('followUpDate');
   const rating = watch('rating');
   const gstStatus = watch('gstStatus');
+  const paymentInfoShared = watch('paymentInfoShared');
   const influencerId = watch('influencerId');
 
   // Reset source code when user manually changes influencer (new influencer has different codes).
@@ -137,180 +141,143 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     }
   }, [influencerId, setValue]);
 
-  // Check for existing lead and populate form
   useEffect(() => {
-    const isTrue = (val: any) => val === true || val === 'true' || val === 1 || val === '1';
+    if (bootstrap.status === 'loading') {
+      hydrationKeyRef.current = null;
+    }
+  }, [bootstrap.status]);
 
-    const extractId = (v: unknown): string => {
-      if (v == null) return '';
-      if (typeof v === 'string') return v;
-      if (typeof v === 'object' && v !== null && '$oid' in v) return String((v as { $oid?: string }).$oid || '');
-      if (typeof (v as any)?.toString === 'function') return (v as any).toString();
-      return String(v);
-    };
+  /**
+   * Single hydration pass after bootstrap: edit = API lead + influencer options in store; create = empty row.
+   */
+  useEffect(() => {
+    if (bootstrap.status !== 'ready') return;
 
-    const populateForm = async () => {
-      // Prevent redundant runs that overwrite fetched state with stale parent props
-      if (!isInitialLoad) return;
+    if (bootstrap.lead) {
+      const lead = bootstrap.lead;
+      const key = `edit:${lead.id}:${String(lead.updatedAt ?? '')}`;
+      if (hydrationKeyRef.current === key) return;
+      hydrationKeyRef.current = key;
 
-      let leadToUse = initialData;
+      const infList = useStore.getState().influencers;
+      const values = mapLeadToFormValues(lead, infList);
+      prevInfluencerRef.current = values.influencerId;
+      setOriginalLead(lead);
+      setDiscoveredLead(null);
+      setShowAlert(false);
+      setInfluencerReadOnly(!!lead.influencerId);
+      reset(values);
+      return;
+    }
 
-      // 1. Fetch fresh FULL data from API if we are editing (have ID)
-      if (initialData?.id) {
-        setIsLoading(true);
-        try {
-          const { token } = useStore.getState();
-          const response = await fetch(`${API_BASE_URL}/sales/leads/${initialData.id}`, {
-            headers: {
-              'Authorization': token ? `Bearer ${token}` : ''
-            }
-          });
-          if (response.ok) {
-            const freshData = await response.json();
-            console.log('📡 Fetched Full Lead Details:', freshData);
-            leadToUse = {
-              ...freshData,
-              id: String(freshData.id || freshData._id)
-            };
-          }
-        } catch (error) {
-          console.error('Error fetching lead details:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      }
+    const createKey = 'create';
+    if (hydrationKeyRef.current === createKey) return;
+    hydrationKeyRef.current = createKey;
 
-      if (leadToUse) {
-        // When editing, wait for influencers to load before populating so the source code dropdown has options (avoids race in production)
-        const needsInfluencers = leadToUse.sourceCode && extractId(leadToUse.influencerId);
-        if (needsInfluencers && influencers.length === 0) {
-          return; // Don't populate yet; effect will re-run when influencers loads
-        }
+    prevInfluencerRef.current = '';
+    setOriginalLead(null);
+    setDiscoveredLead(null);
+    setShowAlert(false);
+    setInfluencerReadOnly(false);
+    discoverySnapshotRef.current = null;
+    reset({
+      mobile: initialMobile || '',
+      name: '',
+      state: '',
+      city: '',
+      address: '',
+      pincode: '',
+      email: '',
+      influencerId: '',
+      sourceCode: '',
+      callStatus: '',
+      rating: null,
+      notes: '',
+      followUpDate: null,
+      converted: false,
+      salesAmount: null,
+      gstStatus: 'NO',
+      paymentInfoShared: false,
+    });
+  }, [bootstrap, initialMobile, reset]);
 
-        setOriginalLead(leadToUse);
-        
-        const backendAmount = Number(leadToUse.salesAmount || (leadToUse as any).amount || 0);
-        const isConverted = isTrue(leadToUse.converted) || backendAmount > 0;
-        const resolvedGst = (leadToUse as any).gstStatus && gstStatuses.includes((leadToUse as any).gstStatus as any)
-          ? (leadToUse as any).gstStatus
-          : (leadToUse.gstStatus === 'YES' || leadToUse.gstStatus === 'APPLIED' || leadToUse.gstStatus === 'APPLIED_THROUGH_US' || isTrue(leadToUse.gst) || isTrue(leadToUse.gstCustomer))
-            ? 'YES'
-            : 'NO';
+  /**
+   * After options + leads list are loaded: detect duplicate mobile (add flow only).
+   */
+  useEffect(() => {
+    if (bootstrap.status !== 'ready' || bootstrap.lead || initialData?.id) return;
 
-        // Robust date parsing
-        let fDate: Date | null = null;
-        if (leadToUse.followUpDate) {
-          const parsed = new Date(leadToUse.followUpDate);
-          if (!isNaN(parsed.getTime())) fDate = parsed;
-        }
+    const clean = (mobile || '').replace(/\D/g, '');
+    if (clean.length < 10) {
+      setDiscoveredLead(null);
+      setShowAlert(false);
+      setInfluencerReadOnly(false);
+      discoverySnapshotRef.current = null;
+      return;
+    }
 
-        reset({
-          mobile: String(leadToUse.mobile || ''),
-          name: String(leadToUse.name || ''),
-          state: String(leadToUse.state || ''),
-          city: String(leadToUse.city || ''),
-          address: String(leadToUse.address || ''),
-          pincode: String(leadToUse.pincode || ''),
-          email: String(leadToUse.email || ''),
-          influencerId: extractId(leadToUse.influencerId),
-          sourceCode: String(leadToUse.sourceCode || ''),
-            callStatus: leadToUse.callStatus || '',
-          rating: leadToUse.rating ?? null,
-          notes: String(leadToUse.notes || ''),
-          followUpDate: fDate,
-          converted: isConverted,
-          salesAmount: backendAmount || null,
-          gstStatus: resolvedGst,
-        });
+    const mobileDigits = clean.slice(-10);
+    const { leads, influencers: infList } = useStore.getState();
+    const found = leads.find((l) => l.mobile.replace(/\D/g, '').slice(-10) === mobileDigits);
 
-        if (leadToUse.influencerId) setInfluencerReadOnly(true);
-      } else if (mobile && mobile.replace(/[^0-9]/g, '').length >= 10 && !initialData) {
-        const { leads } = useStore.getState();
-        const cleanSearchMobile = mobile.slice(-10);
-        const found = leads.find((l) => l.mobile.includes(cleanSearchMobile));
-        
-        if (found) {
-          // Wait for influencers so source code dropdown has options
-          if (found.sourceCode && extractId(found.influencerId) && influencers.length === 0) {
-            return;
-          }
-          setDiscoveredLead(found);
-          setShowAlert(true);
-          
-          const backendAmount = Number(found.salesAmount || (found as any).amount || 0);
-          const isConverted = isTrue(found.converted) || backendAmount > 0;
-          const resolvedGstFound = (found as any).gstStatus && gstStatuses.includes((found as any).gstStatus as any)
-            ? (found as any).gstStatus
-            : (found.gstStatus === 'YES' || found.gstStatus === 'APPLIED' || found.gstStatus === 'APPLIED_THROUGH_US' || isTrue(found.gst) || isTrue(found.gstCustomer))
-              ? 'YES'
-              : 'NO';
+    if (!found) {
+      setDiscoveredLead(null);
+      setShowAlert(false);
+      setInfluencerReadOnly(false);
+      discoverySnapshotRef.current = null;
+      return;
+    }
 
-          let fDate: Date | null = null;
-          if (found.followUpDate) {
-            const parsed = new Date(found.followUpDate);
-            if (!isNaN(parsed.getTime())) fDate = parsed;
-          }
+    const snap = discoverySnapshotRef.current;
+    if (snap && snap.mobileDigits === mobileDigits && snap.leadId === found.id) {
+      return;
+    }
+    discoverySnapshotRef.current = { mobileDigits, leadId: found.id };
 
-          reset({
-            mobile: found.mobile || '',
-            name: found.name || '',
-            state: found.state || '',
-            city: found.city || '',
-            address: found.address || '',
-            pincode: found.pincode || '',
-            email: found.email || '',
-            influencerId: extractId(found.influencerId),
-            sourceCode: found.sourceCode || '',
-            callStatus: found.callStatus || '',
-            rating: found.rating ?? null,
-            notes: found.notes || '',
-            followUpDate: fDate,
-            converted: isConverted,
-            salesAmount: backendAmount || null,
-            gstStatus: resolvedGstFound,
-          });
-
-          setInfluencerReadOnly(true);
-        } else {
-          setDiscoveredLead(null);
-          setShowAlert(false);
-          setInfluencerReadOnly(false);
-        }
-      }
-      
-      // Mark as initialized so re-renders don't wipe the form
-      setIsInitialLoad(false);
-    };
-
-    populateForm();
-  }, [initialData, mobile, reset, isInitialLoad, influencers]);
-
+    const values = mapLeadToFormValues(found, infList);
+    prevInfluencerRef.current = values.influencerId;
+    setDiscoveredLead(found);
+    setShowAlert(true);
+    setInfluencerReadOnly(true);
+    reset(values);
+  }, [bootstrap, mobile, initialData?.id, reset]);
 
   const currentSourceCode = watch('sourceCode');
   const currentInfluencerId = watch('influencerId');
-
-  const toId = (v: unknown): string => {
-    if (v == null) return '';
-    if (typeof v === 'string') return v;
-    if (typeof v === 'object' && v !== null && '$oid' in v) return String((v as { $oid?: string }).$oid || '');
-    if (typeof (v as any)?.toString === 'function') return (v as any).toString();
-    return String(v);
-  };
 
   const activeInfluencers = influencers.map(inf => {
     const activeCodes = (inf.sourceCodes ?? []).filter(sc => sc.status === 'ACTIVE');
     const hasCurrentInActive = activeCodes.some(sc => sc.code === currentSourceCode);
     const isSelectedInfluencer = toId(inf.id) === toId(currentInfluencerId);
     const existingCode = (inf.sourceCodes ?? []).find(sc => sc.code === currentSourceCode);
-    // When editing, include the lead's existing sourceCode even if INACTIVE so it can be pre-filled
-    const codesToShow =
-      hasCurrentInActive || !currentSourceCode || !existingCode || !isSelectedInfluencer
-        ? activeCodes
-        : [...activeCodes, existingCode];
+    // When editing, preserve the lead's existing sourceCode so Radix Select can pre-fill it:
+    //  - INACTIVE codes: include the real entry so it shows with current status.
+    //  - Removed/unknown codes: inject a synthetic INACTIVE option so the value renders
+    //    instead of silently disappearing (fixes edit-lead dropdown wipe).
+    let codesToShow = activeCodes;
+    if (currentSourceCode && isSelectedInfluencer && !hasCurrentInActive) {
+      if (existingCode) {
+        codesToShow = [...activeCodes, existingCode];
+      } else {
+        const syntheticNow = new Date().toISOString();
+        const synthetic = {
+          id: `synthetic:${currentSourceCode}`,
+          code: currentSourceCode,
+          status: 'INACTIVE' as const,
+          createdAt: syntheticNow,
+          updatedAt: syntheticNow,
+        };
+        codesToShow = [...activeCodes, synthetic];
+      }
+    }
     return { ...inf, sourceCodes: codesToShow };
   });
 
   const sourceCodeOptions = activeInfluencers.find(i => toId(i.id) === toId(currentInfluencerId))?.sourceCodes ?? [];
+
+  const isEditingExistingLead =
+    Boolean(initialData?.id) || Boolean(originalLead?.id) || Boolean(discoveredLead?.id);
+  const isMobileReadOnly = role !== 'ADMIN' && isEditingExistingLead;
 
   const onSubmit = async (data: LeadFormData) => {
     try {
@@ -345,6 +312,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         gstStatus: data.gstStatus || 'NO',
         gst: ['YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(data.gstStatus || 'NO'),
         gstCustomer: ['YES', 'APPLIED', 'APPLIED_THROUGH_US'].includes(data.gstStatus || 'NO'),
+        paymentInfoShared: data.paymentInfoShared,
         followUpDate: data.followUpDate ? data.followUpDate.toISOString() : null,
       };
 
@@ -353,7 +321,9 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
 
       if (originalLead) {
         // Update existing lead (Edit Mode)
-        await updateLead(originalLead.id, payload);
+        const patchPayload = { ...payload };
+        if (role !== 'ADMIN') delete patchPayload.mobile;
+        await updateLead(originalLead.id, patchPayload);
         savedLead = { 
           ...originalLead, 
           ...data,
@@ -362,7 +332,9 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         } as Lead;
       } else if (discoveredLead) {
         // Update discovered lead (Add Mode turned into Edit)
-        await updateLead(discoveredLead.id, payload);
+        const patchPayload = { ...payload };
+        if (role !== 'ADMIN') delete patchPayload.mobile;
+        await updateLead(discoveredLead.id, patchPayload);
         savedLead = { 
           ...discoveredLead, 
           ...data, 
@@ -430,7 +402,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const formContent = (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {submitError && (
-        <Alert variant="destructive" className="border-l-4 border-l-red-500 bg-red-50 border-red-200 shadow-md mb-4">
+        <Alert variant="destructive" className="border-l-4 border-l-destructive bg-danger-soft border-destructive/20 shadow-md mb-4">
           <AlertTitle className="font-semibold text-red-700">Validation Error</AlertTitle>
           <AlertDescription className="mt-1 text-red-600">{submitError}</AlertDescription>
         </Alert>
@@ -452,13 +424,17 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           <Input
             {...register('mobile')}
             placeholder="9876543210"
-            readOnly={mobileReadOnly}
+            readOnly={isMobileReadOnly}
+            autoComplete={isMobileReadOnly ? 'off' : 'tel'}
             className={cn(
               "h-11 border-2 transition-colors",
-              mobileReadOnly ? 'bg-muted cursor-not-allowed' : 'hover:border-primary/50 focus:border-primary',
+              isMobileReadOnly ? 'bg-muted cursor-not-allowed' : 'hover:border-primary/50 focus:border-primary',
               errors.mobile && 'border-destructive'
             )}
           />
+          {isMobileReadOnly && (
+            <p className="text-xs text-muted-foreground">Mobile can only be changed by an administrator.</p>
+          )}
           {errors.mobile && (
             <p className="text-sm text-red-600 font-medium">{errors.mobile.message}</p>
           )}
@@ -491,7 +467,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}>
               <SelectValue placeholder="Select state" />
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent>
               {states.map((state) => (
                 <SelectItem key={state} value={state}>
                   {state}
@@ -579,7 +555,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}>
               <SelectValue placeholder="Select influencer" />
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent>
               {activeInfluencers.map((inf) => (
                 <SelectItem key={inf.id} value={inf.id}>
                   {inf.name}
@@ -612,13 +588,14 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}>
               <SelectValue placeholder="Select source code" />
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent>
               <SelectItem value="placeholder">
                 Select source code
               </SelectItem>
               {sourceCodeOptions.map((sc) => (
                 <SelectItem key={sc.code} value={sc.code}>
                   {sc.code}
+                  {sc.status === 'INACTIVE' ? ' (inactive)' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -643,7 +620,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
                 setValue('callStatus', '');
                 return;
               }
-              setValue('callStatus', value as typeof callStatuses[number]);
+              setValue('callStatus', value as (typeof leadCallStatuses)[number]);
               if (value === 'WRONG_NUMBER') {
                 setValue('rating', null);
               }
@@ -655,11 +632,11 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             )}>
               <SelectValue placeholder="Select call status" />
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent>
               <SelectItem value="placeholder">
                 Select call status
               </SelectItem>
-              {callStatuses.map((status) => (
+              {leadCallStatuses.map((status) => (
                 <SelectItem key={status} value={status}>
                   {status.replace('_', ' ')}
                 </SelectItem>
@@ -724,7 +701,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
                 {followUpDate ? format(followUpDate, 'PPP') : 'Pick a date'}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-4 bg-white border rounded-md shadow-md">
+            <PopoverContent className="w-auto p-4 border border-border rounded-md shadow-md">
               <Calendar
                 mode="single"
                 selected={followUpDate || undefined}
@@ -743,17 +720,17 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
               onClick={() => setValue('converted', !converted)}
               className={cn(
                 "relative inline-flex h-7 w-14 items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
-                converted ? "bg-emerald-500" : "bg-slate-300"
+                converted ? "bg-emerald-500" : "bg-muted"
               )}
             >
               <span
                 className={cn(
-                  "inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform",
+                  "inline-block h-5 w-5 transform rounded-full bg-card shadow-lg transition-transform",
                   converted ? "translate-x-8" : "translate-x-1"
                 )}
               />
             </button>
-            <span className={cn("text-sm font-semibold transition-colors", converted ? "text-emerald-600" : "text-slate-500")}>
+            <span className={cn("text-sm font-semibold transition-colors", converted ? "text-emerald-600" : "text-muted-foreground")}>
               {converted ? 'Yes' : 'No'}
             </span>
           </div>
@@ -768,7 +745,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
             <SelectTrigger className={cn("h-11 border-2 transition-colors hover:border-primary/50", errors.gstStatus && "border-destructive")}>
               <SelectValue placeholder="Select GST status" />
             </SelectTrigger>
-            <SelectContent className="bg-white">
+            <SelectContent>
               {gstStatuses.map((s) => (
                 <SelectItem key={s} value={s}>
                   {GST_LABELS[s]}
@@ -779,6 +756,22 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           {errors.gstStatus && (
             <p className="text-sm text-red-600 font-medium">{errors.gstStatus.message}</p>
           )}
+        </div>
+
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40/80 p-4">
+          <Checkbox
+            id="paymentInfoShared"
+            checked={paymentInfoShared}
+            onCheckedChange={(c) => setValue('paymentInfoShared', c === true)}
+          />
+          <div className="space-y-1">
+            <label htmlFor="paymentInfoShared" className="text-sm font-semibold text-foreground cursor-pointer leading-none">
+              Payment information shared with lead
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Check when payment-related details have been communicated to this lead.
+            </p>
+          </div>
         </div>
 
         {converted && (
@@ -817,20 +810,20 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       </div>
 
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent className="bg-emerald-50 border-emerald-200 sm:max-w-md">
+        <DialogContent className="bg-success-soft border border-success/30 sm:max-w-md">
           <DialogHeader className="flex flex-col items-center justify-center text-center space-y-4 pt-4">
-            <div className="rounded-full bg-emerald-100 p-3">
-              <CheckCircle className="h-8 w-8 text-emerald-600" />
+            <div className="rounded-full bg-success/20 p-3">
+              <CheckCircle className="h-8 w-8 text-success" />
             </div>
-            <DialogTitle className="text-xl text-emerald-800">Lead Saved Successfully!</DialogTitle>
-            <DialogDescription className="text-emerald-700 font-medium">
+            <DialogTitle className="text-xl text-success">Lead Saved Successfully!</DialogTitle>
+            <DialogDescription className="text-success font-medium">
               The lead details have been recorded in the system.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="sm:justify-center pb-4">
-            <Button 
+            <Button
               onClick={handleConfirm}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[120px]"
+              className="bg-success text-success-foreground hover:bg-success/85 min-w-[120px]"
             >
               Okay, Great!
             </Button>
@@ -840,18 +833,46 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     </form>
   );
 
-  // Edit case: show loader until lead is fetched and form is populated (influencers ready when needed)
-  const isEditSyncing = Boolean(initialData?.id) && (isLoading || isInitialLoad);
-  if (isEditSyncing) {
-    const editLoader = (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="text-muted-foreground font-medium">Loading lead details...</p>
+  const blockingLoader = (
+    <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <p className="text-muted-foreground font-medium text-center px-4">
+        Loading influencers, source codes, and lead data…
+      </p>
+    </div>
+  );
+
+  if (bootstrap.status === 'error') {
+    const errWrap = (
+      <Alert variant="destructive" className="max-w-lg">
+        <AlertTitle>Could not load lead form</AlertTitle>
+        <AlertDescription className="mt-2">{bootstrap.message}</AlertDescription>
+        <Button type="button" variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </Alert>
+    );
+    if (!showCardWrapper) {
+      return <div className="space-y-4">{errWrap}</div>;
+    }
+    return (
+      <div className="space-y-8">
+        <Card className="shadow-lg border-0">
+          <CardContent className="p-6">{errWrap}</CardContent>
+        </Card>
       </div>
     );
+  }
+
+  if (bootstrap.status === 'loading') {
+    if (!showCardWrapper) {
+      return <div className="min-h-[240px] flex items-center justify-center">{blockingLoader}</div>;
+    }
     return (
-      <div className={cn("min-h-[200px]", showCardWrapper && "bg-white rounded-lg")}>
-        {editLoader}
+      <div className="space-y-8">
+        <Card className="shadow-lg border-0">
+          <CardContent className="p-10">{blockingLoader}</CardContent>
+        </Card>
       </div>
     );
   }
@@ -867,7 +888,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   return (
     <div className="space-y-8">
       <Card className="shadow-lg border-0">
-        <CardHeader className="border-b bg-gradient-to-r from-slate-50 to-white">
+        <CardHeader className="border-b border-border bg-muted/40">
           <CardTitle className="text-2xl font-semibold">Lead Information</CardTitle>
           <CardDescription className="mt-1.5">Enter the lead details below. All fields marked with * are required.</CardDescription>
         </CardHeader>

@@ -90,11 +90,11 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
   };
 
   return (
-     <Card className="border-0 shadow-xl ring-1 ring-slate-200/50 bg-white sticky top-6 overflow-hidden">
-      <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600 w-full" />
-      <CardHeader className="bg-slate-50/50 border-b pb-5">
-        <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-800">
-          <div className="h-9 w-9 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+     <Card className="border border-border shadow-xl ring-1 ring-border/50 bg-card sticky top-6 overflow-hidden">
+      <div className="h-2 gradient-primary w-full" />
+      <CardHeader className="bg-muted/40 border-b border-border pb-5">
+        <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
+          <div className="h-9 w-9 rounded-lg bg-info-soft flex items-center justify-center text-info shadow-sm">
               <UserPlus className="h-5 w-5" />
           </div>
           Register New Employee
@@ -105,10 +105,10 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
       </CardHeader>
       <CardContent className="pt-6">
         {success && (
-          <Alert className="mb-6 bg-green-50 border-green-200 text-green-800">
+          <Alert className="mb-6 bg-success-soft border-success/30 text-success">
             <div className="flex items-center gap-2">
-                <div className="h-5 w-5 rounded-full bg-green-100 flex items-center justify-center">
-                    <span className="text-green-600 text-xs font-bold">✓</span>
+                <div className="h-5 w-5 rounded-full bg-success/20 flex items-center justify-center">
+                    <span className="text-success text-xs font-bold">✓</span>
                 </div>
                 <AlertTitle className="mb-0 font-medium">Employee created!</AlertTitle>
             </div>
@@ -124,7 +124,7 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="name" className="text-slate-600 font-medium">Full Name</Label>
+            <Label htmlFor="name" className="text-muted-foreground font-medium">Full Name</Label>
             <div className="relative">
                 <Input
                 id="name"
@@ -133,14 +133,14 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
                 value={formData.name}
                 onChange={handleChange}
                 required
-                className="pl-10 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                className="pl-10 h-11 bg-muted/40 border-border focus:bg-background transition-all"
                 />
-                <Users className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Users className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
             </div>
           </div>
 
           <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-600 font-medium">Email Address</Label>
+              <Label htmlFor="email" className="text-muted-foreground font-medium">Email Address</Label>
               <div className="relative">
                 <Input
                     id="email"
@@ -150,13 +150,13 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
                     value={formData.email}
                     onChange={handleChange}
                     required
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                    className="pl-10 h-11 bg-muted/40 border-border focus:bg-background transition-all"
                 />
-                <Mail className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Mail className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               </div>
           </div>
           <div className="space-y-2">
-              <Label htmlFor="mobile" className="text-slate-600 font-medium">Mobile Number</Label>
+              <Label htmlFor="mobile" className="text-muted-foreground font-medium">Mobile Number</Label>
               <div className="relative">
                 <Input
                     id="mobile"
@@ -165,14 +165,14 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
                     value={formData.mobile}
                     onChange={handleChange}
                     required
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                    className="pl-10 h-11 bg-muted/40 border-border focus:bg-background transition-all"
                 />
-                <Smartphone className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Smartphone className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-slate-600 font-medium">Password</Label>
+            <Label htmlFor="password" className="text-muted-foreground font-medium">Password</Label>
             <div className="relative">
                 <Input
                 id="password"
@@ -182,12 +182,12 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
                 value={formData.password}
                 onChange={handleChange}
                 required
-                className="pl-10 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                className="pl-10 h-11 bg-muted/40 border-border focus:bg-background transition-all"
                 />
-                <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
             </div>
             <p className="text-xs text-muted-foreground mt-1 ml-1">
-              This will be the user's initial login password.
+              This will be the user&apos;s initial login password.
             </p>
           </div>
 

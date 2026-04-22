@@ -35,15 +35,15 @@ export function Sidebar() {
   const menuItems = role === 'ADMIN' ? adminMenuItems : salesMenuItems;
 
   return (
-    <Card className="h-full p-6 shadow-lg border-0 bg-white">
+    <Card className="h-full p-6 shadow-lg border border-border bg-card">
       <div className="flex flex-col h-full">
-        <div className="mb-8 pb-6 border-b">
+        <div className="mb-8 pb-6 border-b border-border">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center shadow-md">
-              <span className="text-white font-bold text-lg">L</span>
+              <span className="text-primary-foreground font-bold text-lg">L</span>
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight">LMS</h2>
+              <h2 className="text-xl font-bold tracking-tight text-foreground">LMS</h2>
               <p className="text-xs text-muted-foreground font-medium">{role === 'ADMIN' ? 'Administrator' : 'Sales Executive'}</p>
             </div>
           </div>
@@ -80,10 +80,10 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="mt-auto pt-6 border-t">
-          <Button 
-            variant="ghost" 
-            className="w-full justify-start h-11 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" 
+        <div className="mt-auto pt-6 border-t border-border">
+          <Button
+            variant="ghost"
+            className="w-full justify-start h-11 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             onClick={logout}
           >
             <LogOut className="mr-3 h-4 w-4" />

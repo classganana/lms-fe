@@ -42,6 +42,10 @@ export interface Lead {
   gstStatus?: 'YES' | 'NO' | 'APPLIED' | 'APPLIED_THROUGH_US';
   gstCustomer?: boolean;
   salesAmount?: number | null;
+  /** Whether payment-related details have been shared with the lead */
+  paymentInfoShared?: boolean;
+  /** ISO timestamp when the lead was first converted; used for month-wise conversion reporting */
+  conversionDate?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy?: string;

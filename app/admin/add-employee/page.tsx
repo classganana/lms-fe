@@ -46,19 +46,19 @@ export default function AddEmployeePage() {
       <div className="space-y-6 max-w-[1600px] mx-auto pt-8 px-6 pb-20">
         
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-6">
             <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
                 Employee Management
             </h1>
             <p className="text-muted-foreground mt-1">Manage sales executives, accounts, and permissions</p>
             </div>
-            <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={fetchEmployees} 
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchEmployees}
                 disabled={loadingEmployees}
-                className="shadow-sm hover:bg-slate-50"
+                className="shadow-sm"
             >
                 <RefreshCw className={`h-4 w-4 mr-2 ${loadingEmployees ? 'animate-spin' : ''}`} />
                 Refresh List

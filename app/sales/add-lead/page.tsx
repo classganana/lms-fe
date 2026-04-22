@@ -18,12 +18,12 @@ function AddLeadContent() {
     <MainLayout>
       <div className="space-y-8">
         {fromDuplicate && (
-          <Alert className="border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-950/40 text-slate-800 dark:text-slate-100 shadow-sm">
-            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-            <AlertTitle className="text-lg font-semibold text-blue-900 dark:text-blue-100">
+          <Alert className="border-l-4 border-l-info bg-info-soft text-info-foreground shadow-sm">
+            <AlertCircle className="h-5 w-5 text-info shrink-0" />
+            <AlertTitle className="text-lg font-semibold text-info">
               Duplicate lead detected
             </AlertTitle>
-            <AlertDescription className="mt-1 text-blue-800/90 dark:text-blue-200/90 leading-relaxed">
+            <AlertDescription className="mt-1 text-info/90 leading-relaxed">
               A lead with this mobile number already exists. You&apos;ve been redirected to the existing lead — update the details here instead of creating a new entry.
             </AlertDescription>
           </Alert>

@@ -134,7 +134,7 @@ export function DateRangePicker({
             {(dateRange.from || dateRange.to) && (
               <div 
                 role="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={clearDates}
               >
                 <X className="h-3 w-3" />
@@ -142,9 +142,9 @@ export function DateRangePicker({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 bg-white" align="end">
+        <PopoverContent className="w-auto p-0 bg-popover text-popover-foreground" align="end">
           <div className="flex flex-col sm:flex-row">
-            <div className="p-3 border-r border-slate-100 flex flex-col gap-1 min-w-[140px]">
+            <div className="p-3 border-r border-border flex flex-col gap-1 min-w-[140px]">
                {presets.map((preset) => {
                   const isActive = isPresetActive(preset);
                   return (
@@ -153,9 +153,9 @@ export function DateRangePicker({
                       onClick={() => handlePresetClick(preset.getValue())}
                       className={cn(
                         "text-left px-3 py-2 text-sm rounded-md transition-colors w-full",
-                        isActive 
-                          ? "bg-slate-900 text-white font-medium" 
-                          : "text-slate-600 hover:bg-slate-100"
+                        isActive
+                          ? "bg-primary text-primary-foreground font-medium"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}
                     >
                       {preset.label}
