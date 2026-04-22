@@ -1495,7 +1495,7 @@ export default function SalesPage() {
           <DialogContent className="max-w-2xl bg-card rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-card/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
                   <UserIcon className="h-8 w-8 text-white" />
                 </div>
                 <div>

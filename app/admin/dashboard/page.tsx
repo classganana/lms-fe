@@ -921,7 +921,7 @@ export default function AdminDashboardPage() {
             <div className="p-6 border-t bg-muted/40 flex justify-between items-center shrink-0">
                <div className="flex items-center gap-4 text-xs font-black text-muted-foreground uppercase tracking-widest">
                  <span>Lead Volume: <span className="text-foreground">{auditedLeads.length}</span></span>
-                 <div className="w-px h-4 bg-slate-300" />
+                 <div className="w-px h-4 bg-border" />
                  <span>Audit Converted: <span className="text-emerald-600">{auditedLeads.filter(l => l.converted).length}</span></span>
                </div>
                <div className="flex gap-3">
@@ -958,7 +958,7 @@ export default function AdminDashboardPage() {
           <DialogContent className="max-w-4xl bg-card rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-8 bg-gradient-to-r from-blue-700 to-indigo-800 text-white shrink-0">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-card/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
                   <User className="h-8 w-8 text-white" />
                 </div>
                 <div>

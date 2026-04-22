@@ -403,8 +403,8 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {submitError && (
         <Alert variant="destructive" className="border-l-4 border-l-destructive bg-danger-soft border-destructive/20 shadow-md mb-4">
-          <AlertTitle className="font-semibold text-red-700">Validation Error</AlertTitle>
-          <AlertDescription className="mt-1 text-red-600">{submitError}</AlertDescription>
+          <AlertTitle className="font-semibold text-destructive">Validation Error</AlertTitle>
+          <AlertDescription className="mt-1 text-destructive">{submitError}</AlertDescription>
         </Alert>
       )}
       {(showAlert && (discoveredLead || originalLead)) && (
@@ -758,7 +758,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
           )}
         </div>
 
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40/80 p-4">
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
           <Checkbox
             id="paymentInfoShared"
             checked={paymentInfoShared}

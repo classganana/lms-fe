@@ -670,7 +670,7 @@ function LeadsContent() {
                     <TableRow>
                       <TableCell colSpan={role === 'ADMIN' ? 10 : 9} className="text-center text-muted-foreground py-16">
                         <div className="flex flex-col items-center gap-2">
-                          <Search className="h-8 w-8 text-slate-300" />
+                          <Search className="h-8 w-8 text-muted-foreground/60" />
                           <p>No leads found matching your filters</p>
                         </div>
                       </TableCell>
@@ -745,7 +745,7 @@ function LeadsContent() {
           <DialogContent className="max-w-2xl bg-card rounded-2xl border-0 shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-card/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
                   <User className="h-8 w-8 text-white" />
                 </div>
                 <div>
@@ -878,7 +878,7 @@ export default function LeadsPage() {
       <MainLayout>
         <div className="flex items-center justify-center h-full">
           <div className="animate-pulse flex flex-col items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-slate-200" />
+            <div className="w-12 h-12 rounded-full bg-muted" />
             <div className="text-muted-foreground font-medium">Loading leads...</div>
           </div>
         </div>

@@ -35,6 +35,10 @@ export function useLeadFormBootstrap(leadId: string | undefined): LeadFormBootst
     const gen = ++runGenerationRef.current;
     let cancelled = false;
 
+    // Reset to loading on every new target so consumers don't flash stale `ready` data.
+    // This is the canonical shape for "re-fetch when prop changes"; the one-extra render
+    // is negligible here and avoids the render-phase-ref alternative (banned by lint).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({ status: 'loading' });
 
     const run = async () => {
