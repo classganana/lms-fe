@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/lib/api';
 import { Lead } from '@/types';
 import { useStore } from '@/store';
+import { coerceFollowUpToIsoString, extractId } from '@/lib/lead-form-map';
 
 export type LeadFormBootstrapState =
   | { status: 'loading' }
@@ -14,7 +15,9 @@ function normalizeLeadFromApi(raw: Record<string, unknown>): Lead {
   return {
     ...(raw as unknown as Lead),
     id: String(raw.id ?? raw._id),
-  };
+    influencerId: extractId(raw.influencerId),
+    followUpDate: coerceFollowUpToIsoString(raw.followUpDate) as Lead['followUpDate'],
+  } as Lead;
 }
 
 /**
@@ -43,7 +46,14 @@ export function useLeadFormBootstrap(leadId: string | undefined): LeadFormBootst
 
     const run = async () => {
       try {
-        await Promise.all([loadUsers(), loadInfluencers(), loadLeads()]);
+        // loadUsers() hits /admin/users (admin-only). For sales, that 403 + authFetch logs the
+        // user out before loadInfluencers() runs — the form would never get dropdown data.
+        const isAdmin = useStore.getState().role === 'ADMIN';
+        await Promise.all(
+          isAdmin
+            ? [loadUsers(), loadInfluencers(), loadLeads()]
+            : [loadInfluencers(), loadLeads()],
+        );
         if (cancelled || gen !== runGenerationRef.current) return;
 
         if (!leadId) {

@@ -131,7 +131,12 @@ export const useStore = create<Store>()(
 
         loadInfluencers: async () => {
           try {
-            const response = await authFetch(`${API_BASE_URL}/admin/influencers`);
+            const role = get().role;
+            const url =
+              role === 'ADMIN'
+                ? `${API_BASE_URL}/admin/influencers`
+                : `${API_BASE_URL}/sales/influencers`;
+            const response = await authFetch(url);
             if (!response.ok) return;
             const data = await response.json();
             set({ influencers: Array.isArray(data) ? data.map((i: any) => ({ ...i, id: String(i.id || i._id) })) : [] });

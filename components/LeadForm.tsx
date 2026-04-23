@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,7 +17,7 @@ import { useStore } from '@/store';
 import { format } from 'date-fns';
 import { CalendarIcon, Star, CheckCircle, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Lead } from '@/types';
+import { Influencer, Lead } from '@/types';
 import { cn } from '@/lib/utils';
 import { useLeadFormBootstrap } from '@/hooks/useLeadFormBootstrap';
 import {
@@ -86,13 +86,44 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [influencerReadOnly, setInfluencerReadOnly] = useState(false);
+  /** Bumped after RHF `reset` so Radix Select trees remount and pick up programmatic values. */
+  const [selectMountKey, setSelectMountKey] = useState(0);
 
   const hydrationKeyRef = useRef<string | null>(null);
   const discoverySnapshotRef = useRef<{ mobileDigits: string; leadId: string } | null>(null);
 
+  /** If the lead references an influencer not in the list (e.g. inactive, different API), still render a row so the Select can show the value. */
+  const influencersForForm = useMemo((): Influencer[] => {
+    const fromBootstrap =
+      bootstrap.status === 'ready' && bootstrap.lead ? bootstrap.lead : null;
+    const refLead = fromBootstrap ?? originalLead ?? discoveredLead;
+    const targetId = extractId(refLead?.influencerId);
+    if (!targetId) return influencers;
+    if (influencers.some((i) => toId(i.id) === targetId)) return influencers;
+    const code = refLead?.sourceCode;
+    const now = new Date().toISOString();
+    const synthetic: Influencer = {
+      id: targetId,
+      name: 'Linked channel (legacy)',
+      sourceCodes: code
+        ? [
+            {
+              id: 'legacy:source',
+              code: String(code),
+              status: 'INACTIVE',
+              createdAt: now,
+              updatedAt: now,
+            },
+          ]
+        : [],
+    };
+    return [...influencers, synthetic];
+  }, [influencers, bootstrap, originalLead, discoveredLead]);
+
   const {
     register,
     handleSubmit,
+    getValues,
     setValue,
     reset,
     watch,
@@ -126,20 +157,17 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
   const rating = watch('rating');
   const gstStatus = watch('gstStatus');
   const paymentInfoShared = watch('paymentInfoShared');
-  const influencerId = watch('influencerId');
+  const stateField = watch('state');
+  const influencerIdField = watch('influencerId');
 
-  // Reset source code when user manually changes influencer (new influencer has different codes).
-  // Don't clear during initial form population - only when switching from one influencer to another.
-  const prevInfluencerRef = useRef<string>('');
-  useEffect(() => {
-    if (prevInfluencerRef.current !== influencerId) {
-      const wasInitialSet = prevInfluencerRef.current === '';
-      prevInfluencerRef.current = influencerId || '';
-      if (!wasInitialSet) {
-        setValue('sourceCode', '');
-      }
+  /** DB may store a state string not in the static list; Radix must have a matching <SelectItem />. */
+  const stateListForSelect = useMemo((): string[] => {
+    const t = (stateField || '').trim();
+    if (t && !states.includes(t)) {
+      return [t, ...states];
     }
-  }, [influencerId, setValue]);
+    return [...states];
+  }, [stateField]);
 
   useEffect(() => {
     if (bootstrap.status === 'loading') {
@@ -149,8 +177,10 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
 
   /**
    * Single hydration pass after bootstrap: edit = API lead + influencer options in store; create = empty row.
+   * useLayoutEffect so RHF + Radix Select see populated values in the same frame (avoids a wipe race with
+   * a plain useEffect and clearing source on stale influencerId).
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (bootstrap.status !== 'ready') return;
 
     if (bootstrap.lead) {
@@ -161,12 +191,12 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
 
       const infList = useStore.getState().influencers;
       const values = mapLeadToFormValues(lead, infList);
-      prevInfluencerRef.current = values.influencerId;
       setOriginalLead(lead);
       setDiscoveredLead(null);
       setShowAlert(false);
       setInfluencerReadOnly(!!lead.influencerId);
       reset(values);
+      setSelectMountKey((k) => k + 1);
       return;
     }
 
@@ -174,7 +204,6 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     if (hydrationKeyRef.current === createKey) return;
     hydrationKeyRef.current = createKey;
 
-    prevInfluencerRef.current = '';
     setOriginalLead(null);
     setDiscoveredLead(null);
     setShowAlert(false);
@@ -199,6 +228,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
       gstStatus: 'NO',
       paymentInfoShared: false,
     });
+    setSelectMountKey((k) => k + 1);
   }, [bootstrap, initialMobile, reset]);
 
   /**
@@ -235,17 +265,17 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
     discoverySnapshotRef.current = { mobileDigits, leadId: found.id };
 
     const values = mapLeadToFormValues(found, infList);
-    prevInfluencerRef.current = values.influencerId;
     setDiscoveredLead(found);
     setShowAlert(true);
     setInfluencerReadOnly(true);
     reset(values);
+    setSelectMountKey((k) => k + 1);
   }, [bootstrap, mobile, initialData?.id, reset]);
 
   const currentSourceCode = watch('sourceCode');
   const currentInfluencerId = watch('influencerId');
 
-  const activeInfluencers = influencers.map(inf => {
+  const activeInfluencers = influencersForForm.map((inf) => {
     const activeCodes = (inf.sourceCodes ?? []).filter(sc => sc.status === 'ACTIVE');
     const hasCurrentInActive = activeCodes.some(sc => sc.code === currentSourceCode);
     const isSelectedInfluencer = toId(inf.id) === toId(currentInfluencerId);
@@ -458,7 +488,8 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">State</label>
           <Select
-            value={watch('state')}
+            key={`state-${selectMountKey}`}
+            value={stateField && (stateField as string).trim() !== '' ? (stateField as string) : undefined}
             onValueChange={(value) => setValue('state', value)}
           >
             <SelectTrigger className={cn(
@@ -468,7 +499,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
               <SelectValue placeholder="Select state" />
             </SelectTrigger>
             <SelectContent>
-              {states.map((state) => (
+              {stateListForSelect.map((state) => (
                 <SelectItem key={state} value={state}>
                   {state}
                 </SelectItem>
@@ -544,8 +575,15 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Influencer <span className="text-destructive">*</span></label>
           <Select
-            value={watch('influencerId')}
-            onValueChange={(value) => setValue('influencerId', value)}
+            key={`influencer-${selectMountKey}`}
+            value={influencerIdField && String(influencerIdField).trim() !== '' ? String(influencerIdField) : undefined}
+            onValueChange={(value) => {
+              const prev = getValues('influencerId');
+              if (prev && value !== prev) {
+                setValue('sourceCode', '');
+              }
+              setValue('influencerId', value);
+            }}
             disabled={influencerReadOnly}
           >
             <SelectTrigger className={cn(
@@ -571,6 +609,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Source Code <span className="text-destructive">*</span></label>
           <Select
+            key={`source-${selectMountKey}`}
             value={watch('sourceCode') || 'placeholder'}
             onValueChange={(value: string) => {
               if (value === 'placeholder') {
@@ -614,6 +653,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">Call Status <span className="text-destructive">*</span></label>
           <Select
+            key={`callStatus-${selectMountKey}`}
             value={watch('callStatus') || 'placeholder'}
             onValueChange={(value: string) => {
               if (value === 'placeholder') {
@@ -688,7 +728,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Follow-up Date</label>
-          <Popover>
+          <Popover key={`followUp-${selectMountKey}`}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
@@ -739,6 +779,7 @@ export function LeadForm({ initialMobile, initialData, onSuccess, onCancel, show
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">GST Status</label>
           <Select
+            key={`gst-${selectMountKey}`}
             value={gstStatus || 'NO'}
             onValueChange={(v) => setValue('gstStatus', v as (typeof gstStatuses)[number])}
           >
