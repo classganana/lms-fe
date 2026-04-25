@@ -23,6 +23,8 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # Set repository variable `NEXT_PUBLIC_API_BASE_URL` to your public API base, e.g.
+      # https://<public-ip>:3000 or any https://... URL. No extra API domain required.
       - name: Build and Push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -30,3 +32,5 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/lms-fe:latest
           no-cache: true
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}

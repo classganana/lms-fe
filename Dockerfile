@@ -1,5 +1,7 @@
-# Build stage
+# Build stage — NEXT_PUBLIC_* is inlined at `npm run build`; pass via --build-arg in CI/EC2
 FROM node:20-alpine AS builder
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

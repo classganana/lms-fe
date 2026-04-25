@@ -1,7 +1,20 @@
-const DEFAULT_API_BASE_URL = "http://18.60.216.135:3000";
+/**
+ * Baked in at `next build` from `NEXT_PUBLIC_API_BASE_URL` (set in .env or Docker --build-arg).
+ * Never commit a public EC2 IP here — use HTTPS in production to avoid mixed-content blocks.
+ */
+function resolveApiBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (typeof raw === "string" && raw.trim() !== "") {
+    return raw.replace(/\/$/, "");
+  }
+  if (process.env.NODE_ENV === "development") {
+    return "http://localhost:3000";
+  }
+  // Production: same-origin (e.g. nginx proxies /auth, /sales, /admin) or set NEXT_PUBLIC at build
+  return "";
+}
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
+export const API_BASE_URL = resolveApiBaseUrl();
 
 /** Parse NestJS/class-validator error response into a user-friendly message */
 export async function parseApiError(response: Response): Promise<string> {
