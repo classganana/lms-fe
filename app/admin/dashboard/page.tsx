@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,35 +57,60 @@ import { TablePagination, paginateArray } from '@/components/ui/table-pagination
 export default function AdminDashboardPage() {
   const { leads, sales, influencers, users, dateRange, token, loadLeads, loadSales, deleteLead, loadInfluencers, loadUsers, role } = useStore();
   const router = useRouter();
-  const [thisMonthRevenue, setThisMonthRevenue] = useState<number | null>(null);
+  const [adminKpiSummary, setAdminKpiSummary] = useState<{
+    thisMonthRevenue: number;
+    totalRevenue: number;
+    totalSales: number;
+  } | null>(null);
 
-  useEffect(() => {
+  const fetchAdminKpiSummary = useCallback(async () => {
     if (!token) {
-      setThisMonthRevenue(null);
+      setAdminKpiSummary(null);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/admin/dashboard/summary`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && typeof data?.thisMonthRevenue === 'number') {
-          setThisMonthRevenue(data.thisMonthRevenue);
-        }
-      } catch {
-        /* non-blocking KPI */
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.from) {
+        params.set('startDate', new Date(dateRange.from).toISOString());
       }
-    })();
-    return () => {
-      cancelled = true;
+      if (dateRange?.to) {
+        params.set('endDate', new Date(dateRange.to).toISOString());
+      }
+      const qs = params.toString();
+      const url = qs
+        ? `${API_BASE_URL}/admin/dashboard/summary?${qs}`
+        : `${API_BASE_URL}/admin/dashboard/summary`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setAdminKpiSummary({
+        thisMonthRevenue:
+          typeof data?.thisMonthRevenue === 'number' ? data.thisMonthRevenue : 0,
+        totalRevenue:
+          typeof data?.totalRevenue === 'number' ? data.totalRevenue : 0,
+        totalSales: typeof data?.totalSales === 'number' ? data.totalSales : 0,
+      });
+    } catch {
+      /* non-blocking KPI */
+    }
+  }, [token, dateRange?.from, dateRange?.to]);
+
+  useEffect(() => {
+    void fetchAdminKpiSummary();
+  }, [fetchAdminKpiSummary]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void fetchAdminKpiSummary();
     };
-  }, [token]);
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [fetchAdminKpiSummary]);
 
   useEffect(() => {
     loadLeads();
@@ -146,6 +171,7 @@ export default function AdminDashboardPage() {
       alert('Lead deleted successfully');
       loadLeads();
       loadSales();
+      void fetchAdminKpiSummary();
     } catch (error) {
       alert('Failed to delete lead');
     } finally {
@@ -294,8 +320,10 @@ export default function AdminDashboardPage() {
   }, [leads, sales, dateRange]);
   const convertedLeads = conversionsInSelectedRange;
   const conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads) * 100 : 0;
-  const totalSales = filteredSales.length;
-  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
+  const clientTotalSales = filteredSales.length;
+  const clientTotalRevenue = filteredSales.reduce((sum, s) => sum + s.amount, 0);
+  const totalSales = adminKpiSummary?.totalSales ?? clientTotalSales;
+  const totalRevenue = adminKpiSummary?.totalRevenue ?? clientTotalRevenue;
   // GST % = (pending leads with GST YES/APPLIED / total pending leads) * 100 — only non-converted
   const isGstLead = (l: { gstStatus?: string; gstCustomer?: boolean; gst?: boolean }) =>
     l.gstStatus === 'YES' || l.gstStatus === 'APPLIED' || l.gstStatus === 'APPLIED_THROUGH_US' || l.gstCustomer === true || l.gst === true;
@@ -427,7 +455,9 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1">₹{totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground font-medium text-ellipsis overflow-hidden">Financial Achievement</p>
+              <p className="text-xs text-muted-foreground font-medium text-ellipsis overflow-hidden">
+                Recorded transactions · amounts tied to existing leads
+              </p>
             </CardContent>
           </Card>
 
@@ -442,7 +472,7 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-black mb-1 text-teal-700">
-                ₹{(thisMonthRevenue ?? 0).toLocaleString()}
+                ₹{(adminKpiSummary?.thisMonthRevenue ?? 0).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground font-medium">
                 By conversion date · live amounts · excludes deleted leads
@@ -1114,6 +1144,7 @@ export default function AdminDashboardPage() {
                 setIsEditDialogOpen(false);
                 loadLeads();
                 loadSales();
+                void fetchAdminKpiSummary();
               }}
               onCancel={() => setIsEditDialogOpen(false)}
               showCardWrapper={false} 
